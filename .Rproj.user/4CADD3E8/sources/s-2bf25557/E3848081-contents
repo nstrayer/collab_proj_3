@@ -1,0 +1,805 @@
+---
+title: "Project One Analysis"
+author: "Nick Strayer"
+date: "2/16/2018"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE, 
+  message = FALSE,
+  cache = FALSE,
+  fig.width = 10)
+
+# Libraries
+library(tidyverse)
+library(magrittr)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(lme4)
+library(lmerTest)
+
+
+data_raw <-  readRDS('data/data_proj1.rds') %>% {
+    .[] <- lapply(., unclass)
+    .
+  } %>% 
+  mutate(group = case_when(
+    enrolled.dx.factor == 1 ~ 'Normal',
+    enrolled.dx.factor == 2 ~ 'MCI',
+    enrolled.dx.factor == 3 ~ 'Dementia', 
+    enrolled.dx.factor == 4 ~ 'At Risk')
+  )
+
+data <- data_raw %>% 
+  filter(group != 'Dementia') %>% 
+  group_by(map.id) %>% 
+  mutate(time_since_first_visit = np.date - first(np.date)) %>% 
+  ungroup()
+```
+
+
+
+```{r}
+group_var <- c('enrolled.dx.factor')
+group_var_full_names <- c('Enrollement diagnosis')
+
+predictor <- c("asl.reac.grey.matter.hct")
+predictor_full_names <- c("Cardiovascular reactivity")
+
+# covariates to model
+continuous_covs = c("age", "education", "fsrp.minus.age.points")
+continuous_covs_full_names <- c('Age', 'Education (years)', 'FSRP w/o age')
+
+discrete_covs = c( "sex.factor", "raceethnicity.factor", "apoe4pos.factor")
+discrete_covs_full_names = c( "Sex = female", "Race/Ethnicity = white", "APOE")
+
+baseline_covs <- c("age", "education", "sex.factor", "raceethnicity.factor", "apoe4pos.factor", "asl.reac.grey.matter.hct", "fsrp.minus.age.points")
+longitudinal_covs <- c("time_since_first_visit")
+
+
+# FSRP derivation variables 
+fsrp_vars <- c(
+  "htnrx.factor", "diabetes.factor", "currentsmoking.factor", "cvd.factor", "afib.factor", "echo.lvh.factor"
+)
+
+fsrp_vars_full_names <- c(
+  'On hypertension meds', 'Has diabetes', 'Current smoker', 'Cardiovascular Disease', 'Afribulation', 'LVH'
+)
+
+# Neuropsych outcomes
+outcome_columns <- c(
+  "np.moca",              "np.anim",             "np.bnt",               
+  "np.digsymb",           "np.tmta.trun",        "np.tmtb.trun",     
+  "np.tower",             "np.inhibit",          "np.fas",         
+  "np.hvot",              "np.cvlt1to5",         "np.cvlt.ldfr", 
+  "np.cvltrecog.discrim", "np.biber.t1to5",      "np.biber.ld", 
+  "np.biber.discrim",     "np.memory.composite", "np.executive.composite")
+
+outcome_full_names <- c(
+  "MoCA total score",                                 "Animal Naming - total score, recalculated",       
+  "BNT  total",                                       "Digit-Symbol Coding total correct",               
+  "Trails A time (s), truncated",                     "Trails B time (s), truncated",                    
+  "DKEFS Tower total raw score, recalculated",        "DKEFS Color-Word inhibition time (s)",            
+  "FAS - total score",                                "HVOT total score",                                
+  "CVLT-II total immediate recall",                   "CVLT-II long delay free recall",                  
+  "CVLT-II delay recog: total discriminability (d)",  "Biber total immediate recall, recalculated",      
+  "Biber long delay",                                 "Biber delayed recognition - discrimination total",
+  "Memory Composite",                                 "EF Composite")
+
+outcome_short_names <- c(
+  "MoCA score",              "Animal Naming",       
+  "BNT total",               "Digit-Symbol Coding correct",               
+  "Trails A time (s)",       "Trails B time (s)",                    
+  "DKEFS Tower total",       "DKEFS Color-Word time (s)",            
+  "FAS score",               "HVOT score",                                
+  "CVLT-II immediate recall","CVLT-II long delay recall",                  
+  "CVLT-II delay recog (d)", "Biber total immediate recall",      
+  "Biber long delay",        "Biber delayed recognition",
+  "Memory Composite",        "EF Composite")
+
+all_vars <- c(predictor, continuous_covs, discrete_covs, fsrp_vars, outcome_columns, 'time_since_first_visit')
+
+outcome_to_short <- data_frame(
+  variable = outcome_columns, 
+  full = outcome_full_names, 
+  short = outcome_short_names)
+
+abrev_to_full <- data_frame(
+  variable = all_vars, 
+  description =  c(predictor_full_names, continuous_covs_full_names, discrete_covs_full_names, fsrp_vars_full_names, outcome_full_names, 'time since first visit')
+)
+
+model_predictors <- c(continuous_covs, discrete_covs, predictor, 'time_since_first_visit')
+model_predictors_pretty <- c(
+  "age",        "education",  "fsrp",                      
+  "sex_female", "race_white", "apoe", "CVR",
+  'time_since_first_visit'
+)
+
+predictor_to_pretty <- data_frame(variable = model_predictors, pretty = model_predictors_pretty)
+
+
+# exclude people!
+data_gathered_raw <- data[c('epoch', 'map.id', 'group', 'asl.reac.usable.hct', all_vars)] %>% 
+  gather(variable, value, -epoch, -map.id, -group, -asl.reac.usable.hct) %>% 
+  right_join(abrev_to_full)
+
+all_ids <- data_gathered_raw$map.id %>% unique()
+
+asl_usable_ids <- data_gathered_raw %>% 
+  filter(epoch == 1) %>% 
+  filter(asl.reac.usable.hct == 1) %>% 
+  .$map.id %>% unique()
+
+lost_to_asl_usable <- length(all_ids) - length(asl_usable_ids)
+
+# start with just the first epoch to get valid non-excluded id's and also baseline values
+baseline_data_raw <- data_gathered_raw %>% 
+  filter(epoch == 1) %>% 
+  filter(variable %in% baseline_covs)
+
+baseline_data <- baseline_data_raw %>% 
+  filter(asl.reac.usable.hct == 1) %>% 
+  filter(map.id %in% asl_usable_ids) %>%          # usable reac data
+  group_by(map.id) %>% 
+  mutate( no_missing = sum(is.na(value)) == 0 ) %>% 
+  ungroup() %>% 
+  filter(no_missing) %>% 
+  select(-asl.reac.usable.hct, no_missing)
+  
+baseline_complete_ids <- baseline_data$map.id %>% unique()
+excluded_due_to_baseline <- length(asl_usable_ids) - length(baseline_complete_ids)
+
+longitudinal_data_raw <- data_gathered_raw %>% 
+  filter(variable %in% longitudinal_covs)
+
+longitudinal_data <- longitudinal_data_raw %>% 
+  filter(map.id %in% baseline_complete_ids) %>% 
+  group_by(map.id) %>% 
+  mutate(
+    no_missing = sum(is.na(value)) == 0
+  ) %>% 
+  ungroup() %>% 
+  filter(no_missing) %>% 
+  select(epoch, map.id, group, variable, value)
+
+
+longitudinal_complete_ids <- longitudinal_data$map.id %>% unique()
+excluded_due_to_longitudinal <- length(baseline_complete_ids) - length(longitudinal_complete_ids)
+
+data_gathered <- baseline_data %>% 
+  filter(map.id %in% longitudinal_complete_ids) %>% 
+  select(epoch, map.id, group, variable, value) %>% {
+    this <- .
+    epoch_2 <- this %>% mutate(epoch = 2)
+    epoch_3 <- this %>% mutate(epoch = 3)
+    this %>% bind_rows(epoch_2) %>% bind_rows(epoch_3)
+  } %>% 
+  bind_rows(longitudinal_data) %>% 
+  right_join(abrev_to_full)
+
+
+final_ids <- data_gathered$map.id %>% unique()
+
+fsrp_data_raw <- data_gathered_raw %>% filter(variable %in% fsrp_vars)
+
+fsrp_data <- fsrp_data_raw %>% 
+  filter(map.id %in% final_ids) %>% 
+  select(epoch, map.id, group, variable, value, description)
+
+missing_indicators = c(-7777, -119988, -93324, -49995, -9995,  -38885, -235.176, -302.374)
+
+outcome_data_raw <- data_gathered_raw %>% 
+  filter(variable %in% outcome_columns) %>% 
+  filter(!(description %in% c("Memory Composite", "EF Composite") & epoch == 3) ) %>% 
+  mutate(value = ifelse(value %in% missing_indicators, NA, value))
+
+
+outcome_data <- outcome_data_raw %>% 
+  filter(map.id %in% final_ids) %>% 
+  select(epoch, map.id, group, variable, value, description) 
+```
+
+
+
+## Losses to exclusion criteria
+
+The presence of missingness in our data mean we will loose data to our exclusion criteria. 
+We have two stages of exclusion. First the general exclusion criteria that effect all models, and secondly the pairwise exclusion by outcome.
+
+
+
+__General exclusion__
+
+First, we exclude a single patient who had the diagnosis of Dementia. Next, we exclude `r lost_to_asl_usable` patients with unusable baseline data (as encoded by the column `asl.reac.usable.hct`), lastly we exclude `r excluded_due_to_longitudinal` patients due to missingness in one of the longitudinal predictors in the model (systolic blood pressure and FSRP score).
+
+__Pairwise exclusion by outcome__
+
+In an attempt to preserve sample size for each individual model, pairwise deletion of missing values is used as opposed to listwise deletion. The following table shows the number of patients excluded for each neuropysch test. Values of tests were assumed missing if they had values greater than 4 standard deviations from the mean. _These are exclusions in addition to the afformentioned exclusion criteria for the predictors._
+
+```{r}
+find_complete_size <- function(outcome){
+  num_excluded <- outcome_data %>% 
+    filter(map.id %in% final_ids & description == outcome) %>% 
+    group_by(map.id) %>% 
+    summarise(total_missing = sum(is.na(value))) %>% 
+    filter(total_missing != 0) %>% 
+    nrow()
+
+  data_frame(outcome = outcome, `# excluded` = num_excluded)
+}
+
+outcome_full_names %>% 
+  map_df(find_complete_size) %>% 
+  kable('html') %>% 
+  kable_styling(full_width = FALSE) %>% 
+  footnote("Number of patients excluded using pairwise deletion for each outcome.", general_title = '')
+```
+
+
+# Descriptive Statistics
+
+
+First we will explore the structure of the data. Looking at distributions of the different variables present, both overall and stratified by cognative diagnosis. We start by plotting the various covariates present and their distributions, both for the entire dataset ('All') and stratified by diagnosis group ("At Risk", "MCI", and "Normal").
+
+_Note: statistical tests of association are not provided as they are not appropriate for the descriptive statistics sections of an analysis. P-values are an inferential statistic, which is not the goal of the descriptive section. See [Should we stop using the P value in descriptive studies? by James F. Jekel](http://pediatrics.aappublications.org/content/60/1/124) for a more complete discussion of the issue._
+
+## Visual Inspection
+
+First we will graph the data distributions. 
+
+### Continuous variables 
+
+We will compare covariate distribution by group using histograms with a 1 unit bin-width and an overlayed (in blue) kernel density estimate of the distribution with a bin-width of one unit.  
+
+```{r}
+add_all_group <- . %>% {
+  this = .
+  bind_rows(this, this %>% mutate(group = 'All'))
+}
+
+cont_covs_data <- data_gathered %>% 
+  filter(variable %in% continuous_covs) %>% 
+  add_all_group()
+  
+# continuous basic
+cont_covs_data %>% 
+  ggplot(aes(value, ..density..)) + 
+  geom_histogram(binwidth = 1) +
+  geom_density(binwidth = 1, color = 'steelblue', fill = 'steelblue', alpha = 0.4) +
+  facet_grid(group~description, scales = "free")
+```
+  
+### Categorical variables
+
+Next, we look at the distribution of the categorical variables in the form of bar plots corresponding to their counts. 
+
+The plot is divided into two sections: those variables used as predictors in our final model and those not directly used in the final model but used to derive the variable 'FSRP' which is used as a predictor. 
+
+
+```{r}
+factor_covert <- function(value){
+  case_when(
+    value == 2 ~ 'No',
+    is.na(value) ~ 'Missing',
+    TRUE ~ 'Yes')
+}
+convert_factor_to_char <- . %>% 
+  mutate(value =factor_covert(value))
+         
+
+# categorical basic
+categorical_covs_data <- data_gathered %>% 
+  filter(variable %in% discrete_covs) %>% 
+  convert_factor_to_char() %>% 
+  add_all_group()
+
+cat_bar_plot <- function(data){
+  ggplot(data, aes(x = description, fill = value)) +
+    geom_bar() + 
+    facet_grid(.~group, scales = 'free_x') +
+    coord_flip() +
+    guides(fill = guide_legend(reverse = TRUE)) +
+    theme(
+      axis.text.x = element_text(angle = 30, hjust = 1),
+      axis.title.x = element_blank()
+    ) 
+}
+categorical_plot <- categorical_covs_data %>%
+  cat_bar_plot()  + 
+  guides(fill = FALSE) +
+  labs(title = 'Categorical Predictors', x = '', fill = '')
+
+
+# Derived variables
+derived_data <- fsrp_data %>% 
+  convert_factor_to_char() %>% 
+  add_all_group() %>% 
+  filter(value != 'Missing')
+  
+derived_plot <- derived_data %>%
+  cat_bar_plot()  +
+  labs(title = 'FSRP Variables', x = '', fill = '')
+
+categorical_plot + derived_plot + plot_layout(ncol = 1, heights = c(1,2))
+```
+
+
+### Predictor of interest
+
+The last predictor we will look at is the predictor of interest for our final model. The reactivity of grey matter in the patient's brain ("CVR"). As we did with the previous continuous predictors, we will show the distribution with a histogram overlayed with a kernel density estimate of the distribution with a bin-width of 1 unit.  
+
+```{r}
+POI_data <- data_gathered %>% 
+  filter(variable %in% predictor) %>% 
+  filter(epoch == 1) %>% 
+  add_all_group()
+
+POI_data %>%
+  ggplot(aes(value, ..density..)) +
+  geom_histogram(bins = 100) +
+  geom_density(color = 'steelblue', binwidth = 1, fill = 'steelblue', alpha = 0.4) +
+  facet_grid(group~.) +
+  labs(title = 'Cardiovascular reactivity by diagnosis group')
+```
+
+### Followup Times
+
+Next, we look at the time since the first visit for epochs two and three to make sure we don't have any weird behavior that would mess up future models.
+
+```{r}
+# days since first visit. 
+data_gathered %>% 
+  filter(description == 'time since first visit', epoch != 1) %>% 
+  mutate(epoch = factor(epoch)) %>% 
+  add_all_group() %>% 
+  ggplot(aes(x = value, fill = epoch)) +
+  geom_density(alpha = 0.5) +
+  facet_grid(group~., scales = 'free_y')  +
+  labs(x = 'time since first visit')
+```
+
+
+```{r}
+# Continuous covariates
+cont_summary <- . %>% 
+  summarise(value = sprintf('%3.2f (%3.2f)', mean(value), sd(value))) %>% 
+  ungroup()
+  
+cont_covs_table <- cont_covs_data %>% 
+  bind_rows(POI_data) %>% 
+  filter(!is.na(value)) %>% 
+  group_by(description, group) %>% 
+  cont_summary() %>% 
+  mutate(
+    description = ifelse(
+      description == 'Cardiovascular reactivity', 'Cardiovascular reactivity*', description
+    )
+  ) %>% 
+  spread(group, value)
+
+
+# __Discrete Covariates__
+
+cat_var_summary <- . %>% 
+  summarise(
+    total = sum(value == first(value)), 
+    class = first(value),
+    percent = 100*total/n()
+  ) %>% 
+  mutate(
+    value = sprintf('%i (%1.1f%%)', total, percent)
+  ) %>% 
+  select(description, group, value)
+
+
+cat_covs_table <- categorical_covs_data %>% 
+  filter(value != 'Missing') %>% 
+  arrange(desc(value)) %>% 
+  group_by(description, group) %>% 
+  cat_var_summary() %>% 
+  spread(group, value)
+
+
+# __Derived__
+
+derived_covs_table <- derived_data %>% 
+  filter(value != 'Missing') %>% 
+  arrange(desc(value)) %>%
+  group_by(description, group) %>% 
+  cat_var_summary() %>% 
+  spread(group, value)
+
+cont_covs_table %>% mutate(type = 'Continuous') %>% 
+  bind_rows( cat_covs_table %>% mutate(type = 'Categorical')) %>% 
+  bind_rows( derived_covs_table %>% mutate(type = 'Derived')) %>% 
+  select(type, description, All, `At Risk`, MCI, Normal) %>% 
+  kable('html', align = c('l','l','r','r','r','r')) %>% 
+  kable_styling(full_width = FALSE) %>% 
+  collapse_rows(columns = 1) %>% 
+  footnote("Descriptive statistcs by covariate for all patients and stratified by cognative diagnosis. For continuous variables report format is _Mean (Standard Deviation)_, and for discrete variables the format is _total number (% of total for group)_. * Primary predictor of interest; data only for first visit.", general_title = '')
+```
+
+### Outcome distributions
+
+Last, we will attempt to get an idea of neuropsychological test outcome trajectories over the three visits by plotting kernel density estimates of the distributions over time. _For full test names see following table._
+
+```{r, fig.width = 10, fig.height = 10}
+missing_indicators = c(-7777, -119988, -93324, -49995, -9995,  -38885, -235.176, -302.374)
+
+# get dataset of just the np columns along with the date and id columns to plot
+np_data <- outcome_data %>% 
+  filter(!(value %in% missing_indicators) & !is.na(value)) %>% 
+  mutate(epoch = forcats::fct_rev(factor(epoch))) %>% 
+  add_all_group()
+
+
+all_plots <- ggplot()
+
+for(i in 1:length(outcome_columns)){
+  curr_variable <- outcome_columns[i]
+  description <- outcome_short_names[i]
+  
+  all_plots <- all_plots + np_data %>% 
+    filter(variable == curr_variable) %>% 
+    ggplot(aes(x = value, y = epoch)) +
+    ggridges::geom_density_ridges(alpha = 0.5, scale = 1.75, fill = 'steelblue', color = 'steelblue') +
+    facet_grid(.~ group) +
+    scale_y_discrete(expand = c(0.1, 0.01)) +
+    scale_x_continuous() +
+    labs(title = description, y = '', x = '') +
+    theme_minimal() +
+    theme( title = element_text(size = 10),
+           axis.text.x = element_text(angle = 90, hjust = 1, size = 6))
+}
+all_plots +
+  plot_layout(ncol = 4)
+``` 
+
+```{r}
+np_data %>% 
+  group_by(description, group, epoch) %>% 
+  cont_summary() %>% 
+  ungroup() %>% 
+  spread(group, value) %>% 
+  arrange(description, desc(epoch)) %>% 
+  kable('html', align = c('l','c','r','r','r','r')) %>% 
+  kable_styling(full_width = FALSE) %>% 
+  collapse_rows(columns = 1) %>% 
+  footnote("Summary of neuropsychological test results by diagnosis group and time point.   Format: Mean (Standard Deviation).", general_title = '') %>% 
+  scroll_box(height = '550px')
+```
+
+
+## Correlation of CVR to other covariates
+
+For ease of comparisons we will exclusively look at the baseline values for each covariate as we are only looking at baseline for CVR. Continuous correlations will be represented as scatter plots with CVR on the y-axis and the variable of interest on the x-axis. In attempt to better illustrate the correlation a line of best fit drawn through the points. None of the variables are significantly correlated. For the categorical variables we represent the correlation in the form of binned-dotplots and overlayed box-plots with lines at the 25th, 50th, and 75th percentiles. Again we see very little correlation with CVR in these variables. 
+
+
+```{r, fig.height = 8}
+cont_corr_data  <- data %>% 
+  filter(epoch == 1 & !is.na(asl.reac.grey.matter.hct)) %>% 
+  select(
+    CVR = asl.reac.grey.matter.hct,
+    age,
+    sbp,
+    dbp = dbp.1,
+    bmi = bmi.1
+  ) %>% 
+  gather(covariate, value, -CVR) 
+
+cont_corr_plot <- cont_corr_data %>% 
+  ggplot(aes(y = CVR, x = value)) + 
+  geom_point(color = 'steelblue', alpha = 0.75) + 
+  labs(x = '', title = 'Continuous Variables') +
+  geom_smooth(method = 'lm', color = 'black', size = 0.5) +
+  facet_grid(.~covariate, scales = 'free_x') 
+
+disc_corr_data <- data %>% 
+  filter(epoch == 1 & !is.na(asl.reac.grey.matter.hct)) %>% 
+  select(
+    CVR = asl.reac.grey.matter.hct,
+    `sex = female` = sex.factor,
+    `on hypertension meds` = htnrx.factor,
+    `has diabetes` = diabetes.factor,
+    `currently smoker` = currentsmoking.factor,
+    CVD = cvd.factor,
+    `atrial fibrillation` = afib.factor,
+    LVH = echo.lvh.factor
+  ) %>% 
+  gather(covariate, value, -CVR) %>% 
+  mutate(value = ifelse(value == 2, 'yes', 'no')) %>%
+  filter(!is.na(value))
+
+
+disc_corr_plot <- disc_corr_data %>% 
+  ggplot(aes(x = value, y = CVR)) + 
+  geom_dotplot(binaxis = "y", stackdir = "center", size = 0.5, binwidth = 0.3,
+    fill = "steelblue", color = "steelblue", alpha = 0.75) +
+  geom_boxplot(fill = NA, alpha = 0.5) +
+  labs(x = '', title = 'Categorical') +
+  facet_wrap(~covariate, ncol = 4)
+
+cont_corr_plot + disc_corr_plot + plot_layout(ncol = 1, heights = c(1, 2))
+```
+
+
+```{r}
+corr_table <- disc_corr_data %>% 
+  mutate(value = ifelse(value == 'yes', 1, 0)) %>% 
+  bind_rows(cont_corr_data) %>% 
+  group_by(covariate) %>% 
+  summarise(
+    correlation = cor(CVR, value, method = 'spearman')
+  ) %>% 
+  arrange(correlation) %>% 
+  mutate(covariate = fct_inorder(factor(covariate)))
+
+corr_table %>% 
+  ggplot(aes(x = covariate, y = correlation)) +
+  geom_pointrange(aes(ymin = min(correlation), ymax = max(correlation)), alpha = 0.7) +
+  geom_point() +
+  geom_text(aes(label = round(correlation,3)), nudge_x = 0.3) +
+  geom_hline(yintercept = 0,alpha = 0.5, color = 'steelblue') +
+  coord_flip() +
+  labs(title = 'Spearman Rank Correlation with CVR', x = '')
+```
+
+
+
+## Missingness 
+
+The following plots the percentage of the observations with data missing by all data (predictors and outcomes) in the dataset. The only variable we have without any missingness is "APOE".
+
+```{r, fig.cap='Missingness for un-excluded data by variable grouping. FSRP deriving variables had no missingness.'}
+plot_missingness <- function(data){
+  data %>% 
+    group_by(description) %>% 
+    summarise(percent_missing = 100*sum(is.na(value))/n()) %>% 
+    arrange(percent_missing) %>% 
+    mutate(description = fct_inorder(factor(description))) %>% 
+    ggplot(aes(x = description, y = percent_missing)) +
+    geom_point() +
+    geom_text(aes(label = sprintf('  %3.2f%%', percent_missing)),size = 3,  nudge_x = 0.13, hjust = 0) +
+    coord_flip() +
+    ylim(0, 22) +
+    labs(
+      title = 'Missingness for variables in dataset.',
+      y = '% missing', x = '')
+}
+
+(baseline_data_raw %>% plot_missingness() + labs(title = "Baseline Covariates", y = '')) +
+(longitudinal_data_raw %>% plot_missingness() + labs(title = "Longitudinal Covariates", y = '')) +
+(outcome_data_raw %>% plot_missingness() + labs(title = "Outcomes")) +
+  plot_layout(ncol = 1, heights = c(2,0.8,6))
+```
+
+
+---
+
+# Hypothesis Testing
+
+To answer the main hypothesis of that "lower CVR will predict greater cognitive decline over the followup period" we will fit a linear mixed-effects model with random intercepts. This model allows each patient to have a 'random intercept' or individualized starting position for cognitive performance and by fitting an interaction term between followup time ("epoch") and CVR we will be able to assess the affect of differences in CVR on the rate of change in cognitive outcomes. 
+
+## Checking correlation assumptions
+
+Before fitting a mixed-effects model we need to look at the outcome correlations over the epochs to see if we need to fit a model with a special correlation structure (such as a GEE) or if a standard mixed-effects model will suffice.
+
+
+```{r}
+fix_factor <- function(x){abs(as.integer(x - 2))}
+
+model_predictors_data <- data_gathered %>% 
+  filter(variable %in% c('time_since_first_visit', model_predictors)) %>% 
+  select(-description) %>% 
+  right_join(predictor_to_pretty, by = 'variable') %>% 
+  select(-variable) %>% rename(variable = pretty) %>% 
+  spread(variable, value) %>% 
+  mutate(
+    apoe = factor_covert(apoe),
+    race_white = factor_covert(race_white),
+    sex_female = factor_covert(sex_female)
+  )
+
+
+get_data_to_model <- function(outcome){
+  outcome_subset <- outcome_data %>% 
+    filter(description == outcome) %>% 
+    select(epoch, map.id, outcome = value)
+  
+  model_predictors_data %>% 
+    full_join(outcome_subset, by = c('map.id', 'epoch'))
+}
+```
+
+```{r, fig.width = 6}
+corr_by_outcome <- function(outcome){
+  get_data_to_model(outcome) %>% 
+    select(map.id, epoch, outcome) %>% 
+    spread(epoch, outcome) %>% 
+    .[-1] %>% 
+    cor(use = "pairwise.complete.obs") %>% {
+      data_frame(
+        correlation = c(.[1,2], .[1,3], .[2,3]), 
+        seperation =  c(     1,      2,      1), 
+        outcome = outcome)
+    }
+}
+
+outcome_full_names %>% 
+  map_df(corr_by_outcome) %>% 
+  mutate(seperation = factor(seperation)) %>% 
+  ggplot(aes(x = seperation, y = correlation)) +
+  geom_boxplot(fill = NA) + 
+  geom_point(alpha = 0.5) + 
+  labs(
+    x = 'seperation in epochs', 
+    title = 'Correlation at time seperation for all outcomes')
+```
+
+The with the correlation structure suggesting a standard decay over the epochs, along with such a low number of possible time points we find that a standard mixed effects model should be appropriate to answer our hypothesis. 
+
+## Checking residuals of model fits by outcome
+
+Now that we have decided on our model form, we will fit the simplest model first: only a single interaction (the afformentioned epoch and CVR) and check the model residuals to see if we have normality indicating a good model fit. The motivation for such a simple model is the relatively lack of data for each model (~145 patients). With this small of a dataset combined with the random intercepts assumption, we need to be as conservative as possible with our model fit. If a poor fit is indicated in residual inspection a more complex model will be investigated. 
+
+
+```{r}
+fit_model_to_outcome <- function(outcome){
+  outcome_model_data <- get_data_to_model(outcome)
+
+  lmer( outcome ~ group     + age         + apoe + CVR        + education + 
+                  fsrp      + race_white  + sex_female + time_since_first_visit     + 
+                  time_since_first_visit*CVR + (1 | map.id), 
+    data = outcome_model_data)
+}
+
+
+outcome_models <- outcome_full_names %>% 
+  map(fit_model_to_outcome)
+
+
+model_to_residuals <- function(fit, outcome){
+  data_frame(residual = as.numeric(resid(fit)), outcome = outcome)
+}
+
+resids_by_model <- map2_df(outcome_models, outcome_full_names, model_to_residuals)
+
+resids_by_model %>% 
+  right_join(outcome_to_short, by = c('outcome' = 'full')) %>% 
+  ggplot(aes(x = residual)) + 
+  geom_histogram(fill = 'steelblue') + 
+  facet_wrap(~short, scales = 'free_x', ncol = 4)
+```
+
+For almost all of our outcomes our residuals are well distributed, implying a good model fit.
+Based on this we will proceed with the simple model form of a linear combination of all predictors with a single interaction term to model the rate change in cognative performance. 
+
+
+## Significance of predictor of interest
+
+The primary question for this analysis is if cardiovascular reactivity(CVR) is associated with a change in the rate of cognitive deterioration(or improvement). To answer this question we fit our model with an intereaction term between time (epoch) and CVR. The intepretation of this interaction coefficients is as follows: in two groups of patients: a and b, (who are identical in every predictor of interest except CVR,) for every unit of baseline CVR that group b is higher than group a results in a expected change in rate of deterioration of $\beta$.
+
+```{r}
+# model_coef_names <- c(
+#   "(Intercept)", "treatment group = MCI", "treatment group = normal",
+#   "apoe",        "race = white",         "sex = female",           
+#   "age",         "education",          "CVR",                  
+#   "sbp",         "epoch",              "CVR epoch interaction",
+#   "fsrp (no age)"
+# )
+
+raw_names <- c(
+  "(Intercept)",   "groupMCI", "groupNormal",   "age",          
+  "apoeYes",       "CVR",      "education",     "fsrp",         
+  "race_whiteYes",      "sex_femaleYes", "time_since_first_visit",        
+  "CVR:time_since_first_visit"
+)
+
+model_coef_names <- c(
+  "(Intercept)",         "treatment group = MCI", "treatment group = normal", "age",          
+  "apoe",                "CVR",                   "education",                "fsrp (no age)",         
+  "race = white",                         "sex = female",             "followup time",        
+  "CVR followup time interaction"
+) 
+
+
+coef_to_name <- data_frame(variable = raw_names, name = model_coef_names)
+
+extract_all_coefficients <- function(fit, outcome){
+  coef_summary <- summary(fit)$coefficients
+  coefs <- coef_summary %>% 
+    as_data_frame() %>% 
+    select(estimate = Estimate, std_err = `Std. Error`, p_val = `Pr(>|t|)`) %>% 
+    mutate(variable = rownames(coef_summary), outcome = outcome) %>% 
+    filter(!(variable %in% c('(Intercept)', 'epoch'))) %>% 
+    inner_join(coef_to_name) %>% 
+    select(-variable) 
+}
+
+sig_cutoff <- 0.05/length(outcome_columns)
+coefficients_by_outcome <- outcome_models %>% 
+  map2_df(outcome_columns, extract_all_coefficients ) %>% 
+  inner_join(abrev_to_full, by = c('outcome' = 'variable')) %>% 
+  mutate(
+    p_val = p_val,
+    ci_width = 1.96*std_err,
+    lower = estimate - ci_width,
+    upper = estimate + ci_width,
+    association = sprintf('%3.3f (%3.3f,%3.3f)', estimate, lower, upper),
+    `p-value` = sprintf('%3.3f', p_val),
+    `p-value` = ifelse(p_val < sig_cutoff, paste0('*', `p-value`), `p-value`)
+  ) 
+
+predictor_associations <- coefficients_by_outcome %>% 
+  filter(name == 'CVR') 
+
+predictor_associations %>% 
+  select(description, association,`p-value`) %>% 
+  kable('html', align = c('l', 'r', 'r')) %>% 
+  kable_styling(full_width = FALSE) %>% 
+  collapse_rows(columns = 1) %>% 
+  footnote('Interaction coefficients for CVR and Epoch by outcome. Significant (Bonferonni adjusted) p-values are denoted with *.', general_title = '')
+```
+
+```{r}
+predictor_associations %>% 
+  ggplot(aes(x = description, y = estimate)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  geom_hline(yintercept = 0) +
+  labs(
+    title = 'Estimated change in outcome rate related to CVR',x = '', y = 'estimate & 95% CI') +
+  coord_flip()
+```
+
+
+
+## Results
+
+At a significance level of $\alpha = 0.05$ we fail to find a statistically significant change in the rate of score degridation for all outcomes except "MoCA total score" with a p-value of 0.05. However, the significance  dissapears when adjusting for multiple comparisons using the Bonferroni correction ($\alpha_{\text{Bonferroni}} =\alpha/`r length(outcome_columns)` = `r round(sig_cutoff,4)`$). While the Bonferroni correction is most likely overly conservative here any correction would tip the association to insignificant. 
+
+
+## Associations in other predictors/ Secondary analysis
+
+We also investigate the assocations of the non-primary predictors with performance on the test (in a non-longitudinal fashion). These association estimates can be interpreted as "For two groups of patients, a and b, identical in every predictor except the one associated with the coefficient, the expected score for population b on the outcome test will increase by $\beta$ for every unit of the predictor group b is above group a."
+
+The secondary analysis question of interest was to investigate the role of initial diagnosis as a covariate in the model. Since our original model was fit with as much information as possible available to it the diagnosis is already in the initial model results and we can simple extract it here as we do the other predictors. 
+
+```{r, fig.height = 10}
+coefficients_by_outcome %>% 
+  mutate(significant = p_val < sig_cutoff) %>% 
+  right_join(outcome_to_short, by = c('outcome' = 'variable')) %>% 
+  mutate(name = factor(name, levels = rev(model_coef_names))) %>% 
+  ggplot(aes(x = name, y = estimate, color = significant)) +
+  geom_pointrange(
+    aes(ymin = estimate-(1.96*std_err), ymax = estimate+(1.96*std_err)), 
+    size = 0.15
+  ) +
+  geom_hline(yintercept = 0, alpha = 0.5, color = 'steelblue') +
+  facet_wrap(~short, scales = 'free_x') +
+  labs(title = 'All model coefficients by outcome', 
+       subtitle = "Significance is based upon a Bonferonni multiple-comparisons correction threshold.", x = '', y = 'estimate & 95% CI') +
+  coord_flip() +
+  theme(strip.text = element_text(size = 8.5))
+```
+
+```{r}
+coefficients_by_outcome %>% 
+  select(description, name, association, `p-value`) %>% 
+  rename(outcome = description, predictor = name) %>% 
+  kable('html', align = c('l','l','r','r')) %>% 
+  kable_styling() %>%
+  collapse_rows(columns = 1) %>% 
+  scroll_box(height = "400px") %>% 
+  footnote('All model coefficients for all outcomes', general_title = '')
+```
+
+
+We see that in the "Biber long delay", "Biber total immediate recall", "CVLT-II total immediate recall", "CVLT-II long delay free recall", and "Memory Composite" tests the diagnosis group of "normal" is statistically significantly associated with differences in performance on tests as compared to the baseline diagnosis group of "Ambiguous at risk". Interestingly the diagnosis group of MCI fails to reach significance for all tests but "EF Composite", and "Trials B time". Unsurprisingly age and APOE are routinely significant. _Significance assessed using the aformentioned Bonferonni cutoff, and is thus conservative._
+

@@ -1,0 +1,87 @@
+"0","knitr::opts_chunk$set(echo = TRUE)"
+"0","library(tidyverse)"
+"0","library(plotly)"
+"0","library(FNN)"
+"0","data <- read_csv('delineate_students.csv') %>%  "
+"0","  mutate(id = 1:n())"
+"2","Parsed with column specification:
+cols(
+  .default = col_integer(),
+  il6 = col_double(),
+  il8 = col_double(),
+  s100b = col_double(),
+  PAI = col_double(),
+  sTNFR1 = col_double(),
+  proteinC = col_double(),
+  iqcode_score = col_double(),
+  iqcode6mo = col_double()
+)
+"
+"2","See spec(...) for full column specifications.
+"
+"0","data_dict <- read_csv('data_dictionary.csv') %>% "
+"0","  select("
+"0","    variable = `Variable / Field Name`, "
+"0","    description = `Field Label`"
+"0","  ) %>% "
+"0","  mutate("
+"0","    description = ifelse(variable == 'sex', 'Sex = Male', description),"
+"0","    variable = str_remove_all(variable, ' ')"
+"0","  ) %>% "
+"0","  bind_rows("
+"0","    data_frame("
+"0","      variable = 'homemed_steroids',"
+"0","      description = 'Taking Steroids'"
+"0","    )"
+"0","  )"
+"2","Parsed with column specification:
+cols(
+  `Variable / Field Name` = col_character(),
+  `Form Name` = col_character(),
+  `Section Header` = col_character(),
+  `Field Type` = col_character(),
+  `Field Label` = col_character(),
+  `Choices, Calculations, OR Slider Labels` = col_character(),
+  `Field Note` = col_character(),
+  `Text Validation Type OR Show Slider Number` = col_character(),
+  `Text Validation Min` = col_character(),
+  `Text Validation Max` = col_character(),
+  `Identifier?` = col_character(),
+  `Branching Logic (Show field only if...)` = col_character(),
+  `Required Field?` = col_character(),
+  `Custom Alignment` = col_character(),
+  `Question Number (surveys only)` = col_character(),
+  `Matrix Group Name` = col_character(),
+  `Matrix Ranking?` = col_character(),
+  `Field Annotation` = col_character()
+)
+"
+"0","data_gathered <- data %>% "
+"0","  gather(variable, value, -id) %>% "
+"0","  left_join(data_dict, by = 'variable')"
+"0","continuous_vars <- c( "
+"0","  ""age"",""charlson"",""hosp_los"",""mod_apache"",""education_level"",""mod_apache_noage""              "
+"0",")"
+"0","continuous_data <- data_gathered %>% "
+"0","  filter(variable %in% continuous_vars)"
+"0","serum_vars <- c(""il6"",""il8"",""s100b"",""sTNFR1"",""PAI"",""proteinC"")"
+"0","# These have highly skewed distributions and thus we log transform them to get some normality. "
+"0","log_transform_vars <- c(""il6"", ""il8"", ""sTNFR1"")"
+"0","serum_data <- data_gathered %>% "
+"0","  filter(variable %in% serum_vars) %>% "
+"0","  mutate("
+"0","    value =       ifelse(variable %in% log_transform_vars, log2(value), value),"
+"0","    description = ifelse(variable %in% log_transform_vars, paste(description, '| log'), description)"
+"0","  ) "
+"0","binary_vars <- c("
+"0","  ""delirium_0h"",""dementia_lib"",""ed_delirium"",""etiol4_cns_dich1"",""etiol4_drug_dich1"",""etiol4_infection_sys_dich1"","
+"0","  ""etiol4_metab_dich1"",""etiol4_organ_dys_dich1"",""etiol4_other_dich1"",""homemed_steroids"",""ltc"",""nonwhite"",""sex""    "
+"0",")"
+"0","binary_data <- data_gathered %>% "
+"0","  filter(variable %in% binary_vars)"
+"0","outcome_vars <- c("
+"0","  'OARS_ADL_ED_0h_recode','OARS_ADL_ED_6m_recode',  # Function"
+"0","  'iqcode_score', 'iqcode6mo'                       # Cognition"
+"0",")"
+"0","outcome_data <- data_gathered %>% "
+"0","  filter(variable %in% outcome_vars)"

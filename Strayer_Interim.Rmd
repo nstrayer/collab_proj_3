@@ -1,0 +1,333 @@
+---
+title: "Interim"
+author: "Nick Strayer"
+date: "4/2/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(plotly)
+library(FNN)
+
+data <- read_csv('delineate_students.csv') %>%  
+  mutate(id = 1:n())
+
+
+data_dict <- read_csv('data_dictionary.csv') %>% 
+  select(
+    variable = `Variable / Field Name`, 
+    description = `Field Label`
+  ) %>% 
+  mutate(
+    description = ifelse(variable == 'sex', 'Sex = Male', description),
+    variable = str_remove_all(variable, ' ')
+  ) %>% 
+  bind_rows(
+    data_frame(
+      variable = 'homemed_steroids',
+      description = 'Taking Steroids'
+    )
+  )
+
+data_gathered <- data %>% 
+  gather(variable, value, -id) %>% 
+  left_join(data_dict, by = 'variable')
+
+
+continuous_vars <- c( 
+  "age","charlson","hosp_los","mod_apache","education_level","mod_apache_noage"              
+)
+continuous_data <- data_gathered %>% 
+  filter(variable %in% continuous_vars)
+
+serum_vars <- c("il6","il8","s100b","sTNFR1","PAI","proteinC")
+# These have highly skewed distributions and thus we log transform them to get some normality. 
+log_transform_vars <- c("il6", "il8", "sTNFR1")
+
+serum_data <- data_gathered %>% 
+  filter(variable %in% serum_vars) %>% 
+  mutate(
+    value =       ifelse(variable %in% log_transform_vars, log2(value), value),
+    description = ifelse(variable %in% log_transform_vars, paste(description, '| log'), description)
+  ) 
+
+
+
+
+binary_vars <- c(
+  "delirium_0h","dementia_lib","ed_delirium","etiol4_cns_dich1","etiol4_drug_dich1","etiol4_infection_sys_dich1",
+  "etiol4_metab_dich1","etiol4_organ_dys_dich1","etiol4_other_dich1","homemed_steroids","ltc","nonwhite","sex"    
+)
+binary_data <- data_gathered %>% 
+  filter(variable %in% binary_vars)
+
+outcome_vars <- c(
+  'OARS_ADL_ED_0h_recode','OARS_ADL_ED_6m_recode',  # Function
+  'iqcode_score', 'iqcode6mo'                       # Cognition
+)
+outcome_data <- data_gathered %>% 
+  filter(variable %in% outcome_vars)
+
+```
+
+```{r}
+data_dict %>% 
+  mutate(
+    type = case_when(
+      variable %in% continuous_vars ~ 'Continuous', 
+      variable %in% binary_vars ~ 'Binary', 
+      variable %in% outcome_vars ~ 'Outcome',
+      TRUE ~ 'Categorical'
+    )
+  ) %>% 
+  arrange(type) %>% 
+  select(type, variable, description) %>% 
+  knitr::kable(format='html') %>%
+  kableExtra::collapse_rows(columns = 1)
+```
+
+## Primary objective
+
+See if delerium during hospital stay is associated with changes is cognative and functional performance at six month followup. 
+
+
+
+## Dataset Challenges
+
+- 228 patients enrolled
+  - 156 have biomarker measurements
+  - 109 have completed 6 month function
+  - 77 have completed 6 month cognition
+- There may be misclassification in the delirium variables
+
+---
+
+# Missingness and Exclusion
+
+## Missing structure
+```{r}
+data %>% select(-id) %>% 
+  visdat::vis_dat() +
+  theme(
+    axis.text.x.top = element_text(hjust = 0)
+  )
+```
+
+```{r}
+data_gathered %>% 
+  mutate(description = str_replace_all(description, ' ', '_')) %>% 
+  select(-variable) %>% 
+  spread(description, value) %>% 
+  reportviz::missing_patterns()
+```
+
+* Almost all missigness is in the outcome variables and serum measurements. 
+* `r 38 + 22 + 8 + 2 + 1 + 1` patients are missing all of their serum values
+* 41 missing the followup cognition and function values
+* `r 17 + 11 + 1` people are missing the cognition followup but not the function one. 
+* Only two patients were missing Serum protein C but no other serum values.
+
+## Imputation
+
+
+* We will impute education level with the median value due to so few missing. 
+* The two patients missing Serum protein C but no other serum readings will be imputed with a nearest neighbor imputation of other serum values.
+  * Inverse distance weighting of the 10 nearest neighbors used.
+
+```{r}
+# First filter down to serum data on all patients who are not missing all serum but protein c
+serum_data_good <- serum_data %>% 
+  group_by(id) %>% 
+  mutate(
+    missing_protein_c = sum((variable == "proteinC") & is.na(value))>0,
+    missing_all_serum = sum(is.na(value)) == n()
+  ) %>% 
+  ungroup() %>% 
+  filter(!missing_all_serum) %>% 
+  select(id, missing_protein_c, variable, value) %>% 
+  spread(variable, value)
+
+# dataframe of just missing values for serum values. 
+# this is for later merging into gathered data after imputation
+serum_data_bad <- serum_data %>% 
+  filter(!(id %in% serum_data_good$id))
+
+full_obs <- serum_data_good %>% 
+  filter(!missing_protein_c) 
+
+train_data <- full_obs %>% 
+  select(-id, -missing_protein_c, -proteinC) %>% 
+  as.matrix()
+
+missing_obs <- serum_data_good %>% 
+  filter(missing_protein_c) 
+
+test_data <- missing_obs %>% 
+  select(-id, -missing_protein_c, -proteinC) %>% 
+  as.matrix()
+
+nearest_neighbors <- get.knnx(train_data, test_data, k = 10)
+
+weighted_impute <- function(i = 1){
+  nearest_values <- full_obs[nearest_neighbors$nn.index[i,],]$proteinC
+  distances <- nearest_neighbors$nn.dist[i,]
+  weighted.mean(nearest_values, 1/distances)
+}
+
+serum_data_imputed <- missing_obs %>% 
+  mutate(proteinC = purrr::map_dbl(1:2, weighted_impute)) %>% 
+  bind_rows(full_obs) %>% 
+  select(-missing_protein_c) %>% 
+  gather(variable, value, -id) %>% 
+  left_join(data_dict, by = 'variable') %>% 
+  bind_rows(serum_data_bad)
+
+continuous_data_imputed <- continuous_data %>% 
+  mutate(value = ifelse(is.na(value) & variable == 'education_level', median(data$education_level, na.rm = TRUE), value))
+
+gathered_data_imputed <- rbind(
+  serum_data_imputed,
+  continuous_data_imputed,
+  binary_data,
+  outcome_data
+)
+```
+
+## Model Structure
+
+* There will be four main models:
+  - Cognition outcome
+    - w/wo serum data
+  - Function outcome
+    - w/wo serum data
+
+Each model will have it's own sample size. 
+
+```{r}
+missing_categories <- gathered_data_imputed %>% 
+  group_by(id) %>% 
+  summarise(
+    missing_cognative = sum((variable %in% c('iqcode_score', 'iqcode_score')) & is.na(value)) > 0,
+    missing_function = sum((variable %in% c('OARS_ADL_ED_0h_recode', 'OARS_ADL_ED_6m_recode')) & is.na(value)) > 0,
+    missing_serum = sum((variable %in% serum_vars) & is.na(value)) > 0
+  ) %>% 
+  transmute(
+    id = id, 
+    cognition_all = !(missing_cognative | missing_serum),
+    cognition_no_serum = !missing_cognative,
+    function_all = !(missing_function | missing_serum),
+    function_no_serum = !missing_function
+  )
+
+cognition_all <- missing_categories %>% 
+  filter(cognition_all) %>% 
+  .$id
+cognition_no_serum <- missing_categories %>% 
+  filter(cognition_no_serum)%>% 
+  .$id
+  
+function_all <- missing_categories %>% 
+  filter(function_all)%>% 
+  .$id
+function_no_serum <- missing_categories %>% 
+  filter(function_no_serum)%>% 
+  .$id
+
+missing_categories %>% 
+  gather(model, value, -id) %>% 
+  mutate(value = value*1) %>% 
+  spread(model, value) %>% 
+  select(-id) %>%
+  as.data.frame() %>% 
+  UpSetR::upset(
+    order.by = 'freq',
+    sets.x.label = 'Sample Size',
+    mainbar.y.label = "# patients in all selected models"
+    )
+```
+
+* 95 patients who fit the inclusion criteria for all of our models
+* 41 who are excluded only from the cognitive models
+* 14 who are excluded only from functional models
+
+Our model sizes are as follow: cognition model with serum data: `r length(cognition_all)`, cognition model without serum data: `r length(cognition_no_serum)`, function model with serum data: `r length(function_all)`, function model without serum data: `r length(function_no_serum)`, 
+
+---
+
+# Descriptive Visualizations/ Statistics
+
+## Continuous
+
+### Serum Data
+
+First we look at data for serum patients of whom we have serum data for (including the two imputed protein c values).
+
+```{r}
+plot_continuous <- function(data) {
+  data %>% 
+  ggplot(aes(value)) +
+  geom_density(fill = 'steelblue', color = 'steelblue') +
+  geom_text(aes(x = value, y = 0), label = '|', alpha = 0.5, hjust = 0.5, vjust = 1) +
+  facet_wrap(~description, scales = 'free', ncol = 2) +
+  theme_minimal()
+}
+
+serum_data_imputed %>% 
+  filter(!is.na(value)) %>% 
+  plot_continuous()
+```
+
+
+### Continuous non-serum variables
+
+```{r}
+continuous_data_imputed %>% plot_continuous()
+```
+
+
+### Binary data
+
+```{r}
+binary_data <- data_gathered %>% 
+  filter(variable %in% binary_vars) %>% 
+  mutate(value = as.integer(value))
+
+binary_arranged <- binary_data %>% 
+  group_by(description) %>% 
+  mutate(num_yes = sum(value)) %>% 
+  ungroup() %>% 
+  arrange(num_yes) %>% 
+  mutate(description = fct_inorder(factor(description)))
+  
+legend_data <- binary_arranged %>% 
+  group_by(description) %>% 
+  summarise(num_yes = first(num_yes)) %>% 
+  ungroup() %>% 
+  tail(1) %>% {
+    new_df <- rbind(.,.)
+    new_df$num_yes[1] = 0
+    new_df
+  } %>% 
+  mutate(label = c('yes', 'no'))
+
+binary_arranged %>%  
+  mutate(value = ifelse(value == 1, 'yes', 'no')) %>% 
+  ggplot(aes(x = description)) +
+  geom_bar(aes(fill = value), position = 'stack') +
+  geom_text(
+    data = legend_data, 
+    aes(y = num_yes, label = label), 
+    hjust = 0, nudge_y = 5, color = '#525252') +
+  coord_flip() +
+  guides(fill = FALSE) +
+  labs(x = '')
+```
+
+### Outcome Variables
+```{r}
+outcome_data
+```
+

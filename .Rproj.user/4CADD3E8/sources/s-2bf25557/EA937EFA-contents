@@ -1,0 +1,871 @@
+---
+title: "Project Two"
+author: "Nick Strayer"
+date: "2/27/2018"
+output:
+  html_document:
+    code_folding: hide
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  cache = FALSE
+)
+
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(visdat)
+library(broom)
+library(mice)
+library(pROC)
+library(xgboost)
+
+
+# ---- Helper Functions --------------------------------
+fix_formatting <- .  %>% 
+  {
+      .[] <- lapply(., unclass)
+      .
+  }
+
+make_numeric <- . %>% mutate(value = as.numeric(value))
+fix_factor <- function(x) x - 1
+clean_names <- . %>% str_replace_all(., ' ', '_')
+format_factor_names <- . %>% 
+  str_replace_all('_', ' ') %>% 
+  str_replace('Race', 'Race = ') %>% 
+  str_replace('Sex', 'Sex = ') 
+unclean_names <- . %>% str_replace_all(., '_', ' ')
+
+# ---- Constants --------------------------------
+missing_color <- '#fc8d62'
+observed_color <- "#8da0cb"
+
+
+# ---- Initial Data Loading --------------------------------
+data_raw <- readRDS('data_proj2.rds')
+
+
+# convert dob to age at time of visit. 
+# ages <- data_raw %>% 
+#   gather(variable, value, -study_id) %>% 
+#   fix_formatting() %>% 
+#   mutate(study_id = as.character(study_id)) %>% 
+#   filter(variable %in% c('dob', 'date_enrolled')) %>% 
+#   mutate(value = ymd(value)) %>% 
+#   mutate(age = as.numeric((date_enrolled-dob)/365.25) ) %>% 
+#   select(study_id, age)
+
+ages <- readRDS('ages.rds')
+
+data_dictionary <- read_csv('Protocol1610brHeartFailureRisk_DataDictionary_2018-02-13.csv')
+id_vars <- c("study_id")
+id_full <- c("id")
+
+
+# ------ Demographic Data ---------------------------------------------------
+demographic_categorical <- c('sex.factor', 'race.factor')
+demographic_categorical_full <- c('Sex', 'Race')
+
+demographic_continuous <- c(
+  'systolic_bp', 'diastolic_bp', 'heart_rate', 'respiratory_rate', 
+  'sao2',        'temperature',  'o2_rate',    'age')
+demographic_continuous_full <- c(
+  'Systolic bp', 'Diastolic bp', 'Heart rate', 'Respiratory rate', 
+  'Sao2',        'Temperature',  'o2 rate',    'Age')
+
+demographic_vars <- c(demographic_continuous,      demographic_categorical)
+demographic_full <- c(demographic_continuous_full, demographic_categorical_full)
+
+
+# ------ Troponin Data -----------------------------------------------------
+troponin_vars <- c('istat_troponini_results', 'istat_troponini_results_b', 'istat_troponini_results_c', 'troponini_select')
+troponin_full <- c('Baseline troponin',       'Second draw troponin',      'Third draw troponin', 'aggregate')  
+
+predictor_vars <- c(demographic_vars, troponin_vars)
+predictor_full <- c(demographic_full, troponin_full)
+
+# ------ Outcome Data ---------------------------------------------------
+five_day_followup_cols <- c(
+  "five_day_followup_acs", "five_day_followup_emergent_dialysis", "five_day_followup_death_defibrillation_cpr",   "five_day_followup_intubation",                
+  "five_day_followup_icd", "five_day_followup_crt",               "five_day_followup_mechanical_cardiac_support", "five_day_followup_pci",                       
+  "five_day_followup_cab", "five_day_followup_death_all_cause"   
+)
+
+thirty_day_followup_cols <- c(
+  "thirty_day_followup_acs", "thirty_day_followup_emergent_dialysis", "thirty_day_followup_death_defibrillation_cpr",   "thirty_day_followup_intubation",             
+  "thirty_day_followup_icd", "thirty_day_followup_crt",               "thirty_day_followup_mechanical_cardiac_support", "thirty_day_followup_pci",                    
+  "thirty_day_followup_cab", "thirty_day_followup_death_all_cause"    
+)
+
+event_vars <- c(five_day_followup_cols, thirty_day_followup_cols)
+event_full <- c(clean_names(five_day_followup_cols), clean_names(thirty_day_followup_cols))
+
+loss_to_followup_vars <- c('five_day_lost_to_followup', 'thirty_day_lost_to_followup')
+loss_to_followup_full <- c('five day lost to followup', 'thirty day lost to followup')
+
+var_to_full <- data_frame(
+  vars = c(id_vars, predictor_vars, event_vars, loss_to_followup_vars),
+  full = c(id_full, predictor_full, event_full, loss_to_followup_full)
+) %>% 
+  mutate(clean = clean_names(full))
+
+
+data_gathered <- data_raw %>% 
+  select(-age) %>% 
+  mutate(study_id = as.character(study_id)) %>% 
+  right_join(ages, by = 'study_id') %>%  
+  gather(variable, value, -study_id) %>% 
+  fix_formatting() %>% 
+  filter(variable %in% var_to_full$vars) %>% 
+  left_join(var_to_full, by = c("variable" = "vars")) 
+
+predictors_gathered <- data_gathered %>% 
+  filter(variable %in% c(demographic_vars, troponin_vars))
+
+outcomes_gathered <- data_gathered %>%
+  filter(variable %in% c(event_vars, loss_to_followup_vars))
+  
+
+
+#--- Gather outcome data into a form we can use it --------
+outcome_data_by_id <- data_gathered %>%
+  filter(variable %in% event_vars) %>% 
+  mutate(type = ifelse(str_detect(variable, 'five'), 'five_day', 'thirty_day')) %>% 
+  make_numeric() %>% 
+  filter(value != 2) %>% 
+  group_by(study_id, type) %>% 
+  summarise(
+    num_bad_events = sum(value),
+    adverse_event = (num_bad_events > 0)*1, 
+    had_unknown = (n() < 10)*1
+  ) 
+
+# ---- Extract non-excluded Ids ----------------------------------
+
+# not missing baseline troponin
+not_missing_troponin <- predictors_gathered %>% 
+  # filter(full == 'Baseline troponin') %>% 
+  filter(full == 'aggregate') %>% 
+  filter(!is.na(value)) %>% 
+  .$study_id
+```
+
+# Missing and Exclusion Summary
+
+Exclusion criteria for inclusion into our model are as follows: 
+- Patient's that are missing missing either race or sex data as these are strong confounders and imputation methods are less robust for categorical variables. 
+- If a patient is missing more than two continuous variables (age, diastolic and systolic blood pressure, heart rate, o2 rate, respiratory rate, Sao2, temperature and troponin levels).
+  - Patients with two or less missing continuous variables will have them imputed using standard imputation techniques. 
+  - Reasons for omitting >2 missing values are to allow imputation model an adequate number of predictors. 
+
+```{r}
+predictors_gathered %>% 
+  select(study_id, full, value) %>% 
+  spread(full, value) %>% 
+  .[,predictor_full] %>% 
+  vis_dat(sort_type = FALSE) +
+  scale_fill_manual(
+    na.value = missing_color,
+    values=c(observed_color),
+    labels = c("Observed", "Missing")  
+  ) + 
+  theme(
+    legend.title = element_blank(),
+    axis.text.x.top = element_text(hjust = 0, angle = 30)
+  )
+```
+
+
+- We have encouragingly low missingness for our model covariates.
+- Unfortunately high missingness for our predictor of interest. 
+
+## Troponin missing patterns
+
+As many patients don't get different troponin draws because of discharge or other reasons it makes sense that we have increasing levels of missingness as the draw order progresses. In order to check if we can simply use the first 'baseline' troponin draw in our model we can check how many patients were missing baseline, but not missing later draws. If there are a substantial number of these patients it would indicate the missingness is completely at random and it's acceptable to use the data from future values in some sort of average or imputation setup. If this is not the case it would indicate the missingness is not at random(driven by our factors connected to our desired outcome) and we should avoid attempting to gain insight from the data. 
+
+
+```{r}
+predictors_gathered %>% 
+  select(study_id, full, value) %>% 
+  filter(full %in% troponin_full) %>% 
+  mutate(
+    value = (is.na(value))*1,
+    full = str_replace(full, ' troponin', '')
+  ) %>% 
+  spread(full, value) %>% 
+  UpSetR::upset(
+    sets = str_replace(troponin_full, ' troponin', ''), 
+    mainbar.y.label = "Patients w/ pattern",
+    sets.bar.color = missing_color, 
+    sets.x.label = 'Number Missing',
+    order.by = "freq", 
+    matrix.color = missing_color, 
+    line.size = 0.5, 
+    empty.intersections = "on"
+  )
+```
+
+
+- Most common missingness pattern is all three draws being missing. 
+- This is followed by just the third draw missing and the second and third draw missing. 
+- After this we have a substantial drop off in pattern occurrence to 21 patients that are missing the middle draw but not the last, then 13 with the inverse of that pattern. 
+- 8 people had baseline but not aggregate.
+
+Based on these results we will simply take the aggregate reading for everyone, if they have it, instead of averaging the readings as the increase in sample size from averaging of 13 + 9 + 8 = 30 patients is most likely not worth the potentials for confounding driven by factors determining missingness.
+
+## Predictor missingness patterns
+
+Next we will look at all the model predictors together, including baseline troponin.
+
+```{r}
+model_data_w_missing <- predictors_gathered %>% 
+  select(study_id, full, value) %>% 
+  filter(!(full %in% c('Second draw troponin', 'Third draw troponin', "Baseline troponin"))) 
+
+
+model_data_w_missing %>%
+  mutate(value = is.na(value)*1) %>% 
+  spread(full, value) %>% 
+  UpSetR::upset(
+    sets = colnames(.)[-1], 
+    mainbar.y.label = "# Missing",
+    sets.bar.color = missing_color, 
+    matrix.color = missing_color, 
+    line.size = 0.5, 
+    order.by = "freq",
+    sets.x.label = 'Number Missing'
+)
+
+
+# Finds the individuals who had missing outcomes and displays their total outcomes. 
+
+# unknown_outcome_ids <- outcome_data_by_id %>% 
+#   filter(adverse_event == 0 & had_unknown == 1) %>% 
+#   .$study_id
+# 
+# outcome_data_by_id %>% 
+#   filter(study_id %in% unknown_outcome_ids) %>% 
+#   select(study_id, type, adverse_event) %>% 
+#   spread(type, adverse_event)
+
+```
+
+
+- Shows us only a single individual was missing more than two covariates (excluding missing baseline troponin). 
+- As this individual is already missing troponin they will already be excluded. 
+
+
+Based on these investigations we will implement the following exclusion criteria. 
+
+- Exclude all patients who have missingness in their baseline troponin levels (357 patients).
+  - This includes the single patient who is missing three covariates along with baseline troponin. 
+
+In addition, In our thirty day outcome data we have six individuals who had no recorded adverse outcomes, but were missing at least one of the indicators. Of these patients one (`11760000`) had a recorded adverse event for the five day outcome and thus must have had an adverse event for the thirty day outcome as well. This leaves five patients with unknown outcomes. We will assume no adverse outcome. Sensitivity analysis to see if these patients impacted our final model showed negligible effect on performance from this assumption. 
+
+```{r}
+outcomes_clean <- outcome_data_by_id %>% 
+  mutate(
+    adverse_event = ifelse(type == 'thirty day' & study_id == '11760000', 1, adverse_event)
+  ) %>% 
+  select(study_id, type, adverse_event) %>% 
+  mutate(value = as.character(adverse_event)) %>% 
+  select(study_id, clean = type, value)
+ 
+# final_data_untransformed <- predictors_gathered %>% 
+#   filter(!(full %in% c('Second draw troponin', 'Third draw troponin'))) %>% 
+#   select(study_id, clean, value) %>%
+#   bind_rows(outcomes_clean) %>% 
+#   filter(study_id %in% not_missing_troponin) %>% 
+#   spread(clean, value) %>% 
+#   mutate(
+#     Race = ifelse(Race %in% c('Caucasian (non-Hispanic)', 'African American (non-Hispanic)' ), 
+#                   Race, 'Other')
+#   ) %>% {
+#     for(numeric_col in c(clean_names(demographic_continuous_full), 'five_day' ,'thirty_day','Baseline_troponin')){
+#       .[,numeric_col] <- as.numeric(.[,numeric_col])
+#     }
+#     .
+#   } 
+final_data_untransformed <- predictors_gathered %>% 
+  filter(!(full %in% c('Baseline troponin', 'Second draw troponin', 'Third draw troponin'))) %>% 
+  select(study_id, clean, value) %>%
+  bind_rows(outcomes_clean) %>% 
+  filter(study_id %in% not_missing_troponin) %>% 
+  spread(clean, value) %>% 
+  mutate(
+    Race = ifelse(Race %in% c('Caucasian (non-Hispanic)', 'African American (non-Hispanic)' ), 
+                  Race, 'Other')
+  ) %>% {
+    for(numeric_col in c(clean_names(demographic_continuous_full), 'five_day' ,'thirty_day','aggregate')){
+      .[,numeric_col] <- as.numeric(.[,numeric_col])
+    }
+    .
+  } %>% 
+  rename(Troponin = aggregate)
+
+final_data <- final_data_untransformed %>% 
+  mutate(
+    Troponin = log(Troponin + 0.001)
+  )
+
+continuous_predictors <- c(clean_names(demographic_continuous_full),'Troponin')
+
+continuous_comparison_key <- final_data[,continuous_predictors] %>% 
+  gather(term, value) %>% 
+  group_by(term) %>% 
+  summarise(iqr = IQR(value, na.rm = TRUE))
+```
+
+This leaves a total __exclusion of 358 out of `r data_gathered$study_id %>% unique() %>% length()` patients.__ 
+
+---
+
+
+# Descriptive Statistics
+
+## Demographic Variables
+
+### Categorical 
+
+We will look at the demographic variables highlighted in the data-generating R file. We are omitting the date variables due to weird integer values that will need to be understood before being dealt with. Histograms of those are available in the above table.
+
+```{r}
+categorical_demographics <- predictors_gathered %>% 
+  filter(variable %in% demographic_categorical) %>% 
+  select(study_id, full, value) 
+
+cat_plots <- ggplot()
+for(covariate in demographic_categorical_full){
+  variable_plot <- categorical_demographics %>% 
+    filter(full == covariate) %>% 
+    ggplot(aes(value)) + 
+    geom_bar() +
+    labs(x ='') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  cat_plots <- cat_plots + variable_plot
+}
+
+cat_plots
+```
+
+
+We have a decent sex balance and a highly skewed race/ethnicity distribution. We will bin into "African American", "Caucasian", and "Other" in the final model to conserve degrees of freedom. 
+
+### Continuous
+
+```{r}
+cont_demographic_data <- predictors_gathered %>% 
+  filter(variable %in% demographic_continuous) %>% 
+  mutate(value = as.numeric(value))
+
+cont_demographic_data %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(aes(y = ..density..), bins = 100) +
+  geom_density(alpha = 0.4, bw = 1, color = observed_color, fill = observed_color) +
+  facet_wrap(~full, scales = 'free') +
+  labs(title = "Continuous Demographic Variables", subtitle = 'Histograms with 100 bins and overlayed kernel-density estimates with binwidth of 1 unit.')
+```
+
+
+- Age, Blood Pressure, Heart Rate and Temperature all appear to be mostly normal-shaped in their distributions.
+- o2 and respiratory rate are very sparsely valued with just a few unique values.
+- Sao2 appears to have an upper bound of 100 units. 
+
+
+## Distribution of troponin values. 
+
+We have a very large amount of zero-inflation for these data so in the plots we will omit the zeros values in order to do a log-transform to deal with the count nature of the data. 
+
+
+_We have one outlier at 297 for the third troponin value. For ease of viewing plots we will remove it._
+
+
+```{r}
+troponin_data <- predictors_gathered %>% 
+  filter(variable %in% troponin_vars & value != '297') %>% 
+  mutate(value = as.numeric(value), full = str_replace(full, ' troponin', ''))
+
+zeros_plot <- troponin_data %>% 
+  mutate(value = ifelse(value == 0, "0", ">0")) %>% 
+  ggplot(aes(value)) + 
+  geom_bar() +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_blank()
+  ) +
+  labs(x = '') + 
+  facet_grid(full~.)
+
+non_zeros_plot <- troponin_data %>% 
+  filter(value > 0) %>%
+  ggplot(aes( x= log(value+0.001))) +
+  geom_histogram(aes(y = ..density..), bins = 50) +
+  geom_density(fill = observed_color, alpha = 0.3) +
+  facet_grid(full~.) 
+
+zeros_plot + non_zeros_plot + plot_layout(ncol = 2, widths = c(1, 4))
+```
+
+- Troponin seems to be rather stable in its distribution throughout the three draws. Unsurprisingly we have an increasing proportion of non-zero values as the draws go on (more severe cases staying means less likely to have Troponin levels below the detectable threshold.)
+
+## Summary table of predictors 
+
+```{r}
+categorical_table <- categorical_demographics %>% 
+  mutate(value = case_when(
+    full == 'Race' & !(value %in% c('African American (non-Hispanic)', 'Caucasian (non-Hispanic)')) ~ 'Other',
+    TRUE ~ value
+  )) %>% 
+  rename(group = value) %>% 
+  group_by(full, group) %>% 
+  summarise(value = as.character(n()))
+
+troponin_table <- troponin_data %>% 
+  bind_rows(troponin_data %>% mutate(full = 'All')) %>% 
+  group_by(full) %>% 
+  summarise(
+    value = sprintf('%3.2f (%3.2f)', mean(value, na.rm = TRUE), sd(value, na.rm = TRUE))
+  ) %>% 
+  mutate(group = full, full = 'Toponin')
+
+continuous_table <- cont_demographic_data %>% 
+  group_by(full) %>% 
+  summarise(
+    value = sprintf('%3.2f (%3.2f)', mean(value, na.rm = TRUE), sd(value, na.rm = TRUE))
+  ) %>% 
+  mutate(group = '')
+
+categorical_table %>% 
+  bind_rows(continuous_table) %>% 
+  bind_rows(troponin_table) %>% 
+  select(full, group, value) %>% 
+  kable('html', col.names = c("Variable", 'Group', 'Count/Mean(SD)')) %>% 
+  kable_styling(full_width = FALSE) %>% 
+  collapse_rows(columns = c(1,2))
+```
+
+
+## Outcome Variables
+
+We will first look at our outcomes in terms of total number of "bad" events seen to see if dichotomizing is appropriate for modeling. 
+
+```{r}
+outcome_data_by_id %>% 
+  group_by(type, num_bad_events) %>% 
+  summarize(count = n()) %>% 
+  ggplot(aes(x = num_bad_events, y = count)) +
+  geom_col() +
+  geom_text(aes(y = count, label = count), vjust = 0, nudge_y = 5) +
+  facet_grid(.~type) +
+  labs(x = 'number of adverse events', title = 'Adverse event counts by number of outcomes')
+```
+
+Based on these plots we will combine all numbers greater than one into a simple 'adverse event' category. Total of < 20 cases that were anything more than a single adverse outcome means our model would not be able to adequately capture the originality of the response. 
+
+```{r}
+outcome_data_by_id %>% 
+  mutate(adverse_event = ifelse(adverse_event == 1, 'yes', 'no')) %>% 
+  group_by(type, adverse_event) %>% 
+  summarise(count = n()) %>% 
+  ggplot(aes(x = adverse_event, y= count)) +
+  geom_col() +
+  geom_text(aes(y = count, label = count), vjust = 0, nudge_y = 5) +
+  facet_grid(.~type) +
+  labs(x = 'adverse event', title = 'Occurance of adverse event by outcome')
+```
+
+Unsurprisingly we see a slightly higher count of adverse events for the thirty day data than for the five. 
+
+
+### Outcome Table
+
+```{r}
+outcome_data_by_id %>% 
+  mutate(
+    outcome_type = 'Ordinal',
+    num_bad_events = as.character(num_bad_events)) %>% 
+  bind_rows(
+    outcome_data_by_id %>% 
+      mutate(
+        outcome_type = 'Dichotomous',
+        num_bad_events = ifelse(adverse_event == 1, '>0', '0'))
+  ) %>% 
+  group_by(outcome_type, type, num_bad_events) %>% 
+  summarize(count = n()) %>% 
+  spread(type, count) %>% 
+  kable('html', col.names = c("Outcome Type", '# adverse events', 'five day outcome', 'thirty day outcome')) %>% 
+  kable_styling(full_width = FALSE) %>% 
+  collapse_rows(columns = 1)
+```
+
+
+We have a much higher quantity of survivors than we do of deaths/cases. This will substantially limit the power of our model, especially in the five-day case. 
+
+---
+# Imputing Missing Values
+
+We will use Multivariate Imputations by Chained Equations (MICE) imputation to fill in the missing values left in our data set. We will use predictive mean matching as our missing values are all continuous. 
+
+```{r, echo = FALSE}
+model_data <- final_data %>% 
+  mice(m=5, maxit = 40) %>% 
+  complete(5)
+```
+
+---
+# Modeling
+
+
+We will start with a basic logistic regression model. This will model the log-odds of an adverse event as a linear function of the predictors.
+
+```{r,fig.height = 10, fig.cap="Model results by outcome length. Continuous predictors are standardized such that coefficient corresponds to a change from their 25th the the 75th percentile (IQR). Multiple confidence intervals are shown."}
+predictor_columns <- c(
+  "Age",              "Troponin", "Diastolic_bp",
+  "Heart_rate",       "o2_rate",           "Race",
+  "Respiratory_rate", "Sao2",              "Sex",
+  "Systolic_bp",      "Temperature") %>%
+# predictors <- c( 
+#   "Age",              "Baseline_troponin", "Diastolic_bp", 
+#   "Heart_rate",                "Race", 
+#   "Respiratory_rate", "Sao2",              "Sex", 
+#   "Systolic_bp",      "Temperature") %>% 
+  clean_names() 
+
+ 
+predictors <- predictor_columns %>% 
+  paste(collapse = ' + ')
+
+make_model_formula <- . %>%  
+  paste(' ~ ', predictors, collapse = '') %>% 
+  as.formula()
+
+make_ci <- function(percent = 95, model_results){
+  width_mult <- qnorm((1 - percent/100)/2, lower.tail = FALSE)
+  model_results %>% 
+    mutate(
+      interval_width = std.error*width_mult,
+      upper_limit = estimate + interval_width,
+      lower_limit = estimate - interval_width,
+      size = percent,
+      line_width = case_when(
+        percent == 99 ~ 1,
+        percent == 95 ~ 1.5,
+        percent == 90 ~ 2
+      )
+    ) %>% 
+    select(term, estimate, lower_limit, upper_limit, size, line_width, p.value)
+}
+
+plot_model_results <- function(model_results, title, interval_sizes = c(90, 95, 99)){
+  interval_sizes %>% 
+    map_df(make_ci, model_results) %>% 
+    filter(term != '(Intercept)') %>% 
+    arrange(desc(size)) %>% 
+    left_join(continuous_comparison_key, by = 'term') %>% 
+    mutate(
+      iqr = ifelse(is.na(iqr), 1, iqr),
+      lower_limit = lower_limit*iqr, 
+      upper_limit = upper_limit*iqr,
+      term = format_factor_names(term),
+      size = fct_inorder(factor(size))
+    ) %>% 
+    ggplot(aes(color = size)) +
+    # ggplot() +
+    geom_col(aes(x = 'Age', y = 0, fill = size), color = NA) +
+    geom_hline(yintercept = 0, alpha = 0.4) +
+    geom_linerange(
+      aes(ymax = lower_limit, ymin = upper_limit, x = term),
+      size = 4.5
+    ) +
+    scale_color_brewer(palette = 'Oranges') +
+    scale_fill_brewer(palette = 'Oranges') +
+    labs(
+      x = '',
+      fill = '% CI',
+      title = title
+    ) +
+    scale_size(guide = FALSE) +
+    coord_flip() +
+    theme_minimal()
+}
+
+
+# Five Day
+five_day_model <- glm(
+  make_model_formula('five_day'), 
+  family = binomial(link = "logit"), 
+  data = model_data
+ ) 
+
+five_day_results <- five_day_model %>% tidy()
+
+five_day_plot <- plot_model_results(five_day_results, 'Five Day')
+
+# Thirty Day
+thirty_day_model <- glm(
+  make_model_formula('thirty_day'), 
+  family = binomial(link = "logit"), 
+  data = model_data
+ ) 
+
+thirty_day_results <- thirty_day_model %>% 
+  tidy()
+
+thirty_day_plot <- plot_model_results(thirty_day_results, 'Thirty Day')
+
+(five_day_plot+ guides(color = FALSE) + labs(y = '')) +
+  (thirty_day_plot + guides(fill = FALSE, color = FALSE) + labs(y = 'effect')) + 
+  plot_layout(ncol = 1)
+```
+
+```{r}
+continuous_comparison_key %>% 
+  mutate(term = format_factor_names(term)) %>% 
+  select(Variable = term, IQR = iqr) %>% 
+  kable(digits = 3, caption = 'Interquartile ranges used for standardization in above coefficients plot.')
+```
+
+
+```{r}
+rbind(
+    make_ci(95, five_day_results) %>% 
+      mutate(outcome = 'Five day'),
+    make_ci(95, thirty_day_results) %>% 
+      mutate(outcome = 'Thirty day')
+  ) %>% 
+  mutate(
+    Variable = format_factor_names(term),
+    result = sprintf('%3.2f(%3.2f-%3.2f)', estimate, lower_limit, upper_limit),
+    result = ifelse(p.value < 0.05, paste0('**', result, '**'), result)
+  ) %>% 
+  select(Variable, outcome, result) %>% 
+  spread(outcome, result) %>% 
+  kable(align = c('l', 'r', 'r'),caption = 'Coefficient estimates for a single unit of each predictor variable. Significant predictors are bolded.')
+```
+
+### Interpretation
+
+We find that for the five day model in two groups of identical patients if one group has baseline Troponin readings $\ln(\text{x} + 0.001) = 1$ higher than the other group, there would be an increase in the log-odds of re-admittance within five days of thirty percent, statistically significant at the $\alpha = 0.05$ level. This contrasts with the thirty day adverse event outcomes, where baseline Troponin does not have a statistically significant affect on the log odds of re-admittance.
+
+
+# Tree Model
+
+While a linear model is amenable to inference, it necessitated the imputation of missing data and the transformation of data with skewed distributions. In an attempt to fit a model that does not have these restrictions we will attempted a gradient boosted random forest model. 
+
+Briefly, boosted trees work by fitting a shallow decision tree (in our case no more than three splits deep) to the data. The model then looks at what data points it incorrectly classified and fits another tree designed to fit those misclassified points well. It then tests both trees together, averaging their predictions together and repeats the process many times, adding new trees in an attempt to better classify the previously misclassified points. 
+
+These models tend to be better predictors than regression models and are capable of handing input data with very little transformation/ imputation. The downside is that they don't have nice inferential properties and thus here we are fitting as an attempt to see the most information about outcome we can squeeze out of our model and compare that to what our regression model achieved. 
+
+## Accessing model performance
+
+We can attempt to get an idea of how well our model is fitting the data by looking at the receiver operator curve (ROC) for each model. A higher area under the ROC curve (AUC) will indicate the model is better fit to the data and thus predicting outcome more accurately. 
+
+
+```{r, fig.cap = 'Results of bootstrap validation of regression and tree models. Smoothed ROC estimates are plotted along with the distribution of the AUC estimates for each model. Lines in densities correspond to mean AUC.', fig.width=10}
+options(na.action='na.pass')
+make_tree_data <- . %>% 
+    select(-five_day, -thirty_day, -study_id) %>% {
+      model.matrix( ~ .-1, data = ., na.action = 'na.pass')
+    }
+
+num_ids <- final_data_untransformed$study_id %>% unique() %>% length()
+
+    
+train_model <- function(ids, run, outcome, type){
+  try({
+    if(type == 'tree'){
+      
+      sampled_data <- final_data_untransformed %>%
+        filter(study_id %in% ids)
+      
+      unsampled_obs <- final_data_untransformed %>% 
+        filter(!(study_id %in% ids))
+      
+      test_predictions <- xgboost(
+        data = make_tree_data(sampled_data), 
+        label = sampled_data[,outcome], 
+        objective = "binary:logistic",
+        eval_metric = 'auc',
+        verbose = 0,
+        max_depth = 3, eta = 1, nthread = 2, nrounds = 6
+      ) %>% 
+        predict(make_tree_data(unsampled_obs) )
+    
+    } else {
+      sampled_data <- model_data %>% 
+        filter(study_id %in% ids)
+      
+      unsampled_obs <- model_data %>% 
+        filter(!(study_id %in% ids))
+  
+      test_predictions <- glm(
+        make_model_formula('five_day'), 
+        family = binomial(link = "logit"), 
+        data = sampled_data
+      ) %>% 
+        predict(unsampled_obs)
+    }
+  
+    roc_obj <- roc(unsampled_obs[,outcome], test_predictions)
+  
+    return(data_frame(
+      true_pos = 1 - roc_obj$specificities,
+      false_pos = roc_obj$sensitivities,
+      auc = auc(roc_obj),
+      outcome = outcome,
+      model_type = type,
+      run = run
+    ))
+  }, silent = TRUE)
+  data_frame(
+    true_pos = numeric(),
+    false_pos =  numeric(),
+    auc =  numeric(),
+    outcome = character(),
+    model_type = character(),
+    run = integer()
+  )
+}
+
+
+compare_models <- function(i){
+  sampled_ids <- final_data_untransformed$study_id %>%
+    sample(size = num_ids, replace = TRUE)
+  
+  rbind(
+    train_model(sampled_ids, i, 'five_day', 'tree'),
+    train_model(sampled_ids, i, 'five_day', 'tree'),
+    train_model(sampled_ids, i, 'thirty_day', 'tree'),
+    train_model(sampled_ids, i, 'five_day', 'regression'),
+    train_model(sampled_ids, i, 'thirty_day', 'regression')
+  ) 
+}
+
+num_boot <- 500
+
+bootstrap_results <- map_df(1:num_boot, compare_models) %>% 
+  mutate(outcome = str_replace(outcome, '_', ' '))
+
+auc_results <- bootstrap_results %>% 
+  group_by(outcome, model_type) %>% 
+  summarize(avg_auc = mean(auc)) %>% 
+  ungroup() 
+
+roc_plot <- bootstrap_results %>% 
+  ggplot(aes(x = true_pos, y = false_pos, color = model_type)) +
+  geom_line(aes(group = run), alpha = 0.005)+
+  geom_smooth(se = F) +
+  facet_wrap( ~outcome, ncol = 1, strip.position = 'left') +
+  geom_abline(slope = 1) +
+  labs(x = 'true positive', y = 'false positive', title = 'ROCs') +
+  guides(color = FALSE)
+
+auc_plot <- bootstrap_results %>% 
+  group_by(outcome, model_type, run) %>% 
+  summarize(auc = mean(auc)) %>% 
+  ggplot(aes(auc, fill = model_type)) +
+  geom_density(alpha = 0.3, adjust = 2) +
+  geom_vline(data = auc_results, aes(xintercept = avg_auc, color = model_type)) +
+  labs(title = 'AUC') +
+  facet_wrap( ~ outcome, ncol = 1) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_blank()
+  ) +
+  guides(color = FALSE, fill = FALSE)
+
+
+
+winner_plot <- bootstrap_results %>% 
+  group_by(model_type, run, outcome) %>% 
+  summarise(
+    auc = last(auc)
+  ) %>% 
+  ungroup() %>% 
+  spread(model_type, auc) %>% 
+  mutate(regression_wins = regression > tree) %>%
+  group_by(outcome) %>% 
+  summarise(proportion_regression = sum(regression_wins)/n()) %>% 
+  mutate(winner = ifelse(proportion_regression > 0.5, 'regression', 'tree')) %>% 
+  ggplot(aes(y = proportion_regression, ymin = 0.5, ymax = proportion_regression, x = 1)) +
+  geom_pointrange(aes(color = winner)) + 
+  geom_hline(aes(yintercept = 0.5), alpha = 0.4)+
+  ylim(0.32, 0.68) +
+  coord_flip() +
+  theme(
+   panel.grid.major.y = element_blank(),
+   panel.grid.minor.y = element_blank(),
+   axis.ticks.y = element_blank(),
+   axis.text.y = element_blank(),
+   axis.title.y = element_blank(),
+   strip.background = element_blank(),
+   strip.text = element_blank()
+  ) +
+  labs(color = 'Model',y = 'Regression > AUC', title = 'Regression Win Prop.') +
+  facet_grid(outcome~.) 
+
+roc_plot + auc_plot + winner_plot + plot_layout(widths = c(1,1,0.5))
+```
+
+It should be noted that neither model fits particularly well. This can be attributed to the fact we have so few events in either of our models. 
+
+## Variable Importance
+
+While traditional inference is not possible with tree models we can look at the decision the model made to determine how important a given variable was in prediction. Note that because the trees are shallow it is possible for a variable to never be used in the ensemble if it doesn't provide good predictive power, thus some variables are absent for given models.
+
+```{r}
+five_day_tree <- xgboost(
+  data = make_tree_data(final_data_untransformed), 
+  label = final_data_untransformed$five_day, 
+  objective = "binary:logistic",
+  eval_metric = 'auc',
+  verbose = 0,
+  max_depth = 3, eta = 1, nthread = 2, nrounds = 6
+)
+
+thirty_day_tree <- xgboost(
+  data = make_tree_data(final_data_untransformed), 
+  label = final_data_untransformed$thirty, 
+  objective = "binary:logistic",
+  eval_metric = 'auc',
+  verbose = 0,
+  max_depth = 3, eta = 1, nthread = 2, nrounds = 6
+)
+
+
+xgb.importance(feature_names = predictor_columns, model = five_day_tree) %>% 
+  mutate(outcome = 'five day') %>% 
+  bind_rows(
+    xgb.importance(feature_names = predictor_columns, model = thirty_day_tree) %>% 
+      mutate(outcome = 'thirty day') 
+  ) %>% 
+  arrange(Gain, outcome) %>% 
+  mutate(predictor = fct_inorder(factor(unclean_names(Feature)))) %>%
+  ggplot(aes(y = predictor, x = Gain, color = outcome)) +
+  geom_point(size = 2) +
+  labs(title = "Importance of each predictor in tree models", 
+       subtitle = "Measured as average importance of feature in model out of 1\nDue to nature of boosted trees some predictors were not used in final models.")
+```
+
+
+## Importance Interpretation
+
+We can see that in our boosted tree models baseline troponin was in fact a very important variable. This is most evident in the five-day outcome model where the baseline troponin measurement was the single most important variable and in fact he most important variable across both models. The importance of baseline troponin decreases as the time extends, while still being in the upper half of variable importance. 
+
+Intuitively this makes sense, as the closer we are to our event of interest the more impact something as immediate as troponin would have. As we extend our window of interest more external factors (potentially unmeasured) have time to 'kick in' and influence the outcome. For instance, the most important predictor for the thirty day outcome is Age, which is much less 'immediate' but is a good proxy of lifestyle/ other potentially harmful effects. We see these same patterns reflected in the logistic regression model as well.
+
+
+```{r}
+options(na.action="na.omit")
+```
+

@@ -1,0 +1,4 @@
+]0;/home/nick/fast_bind/collaboration/project3]0;nick@compooper: ~/fast_bind/collaboration/project3[01;32mnick@compooper[00m:[01;34m~/fast_bind/collaboration/project3[00m$ [K]0;nick@compooper: ~/fast_bind/collaboration/project3[01;32mnick@compooper[00m:[01;34m~/fast_bind/collaboration/project3[00m$ git init
+Initialized empty Git repository in /home/nick/fast_bind/collaboration/project3/.git/
+]0;/home/nick/fast_bind/collaboration/project3]0;nick@compooper: ~/fast_bind/collaboration/project3[01;32mnick@compooper[00m:[01;34m~/fast_bind/collaboration/project3[00m$ git remote add origin git@github.com:nstrayer/collab_proj_3.git
+]0;/home/nick/fast_bind/collaboration/project3]0;nick@compooper: ~/fast_bind/collaboration/project3[01;32mnick@compooper[00m:[01;34m~/fast_bind/collaboration/project3[00m$ lgit "most of the exploratory stuff has been done"

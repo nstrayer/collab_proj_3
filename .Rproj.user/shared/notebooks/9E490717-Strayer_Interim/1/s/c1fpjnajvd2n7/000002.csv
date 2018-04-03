@@ -1,0 +1,169 @@
+"0","data_dict %>% "
+"0","  mutate("
+"0","    type = case_when("
+"0","      variable %in% continuous_vars ~ 'Continuous', "
+"0","      variable %in% binary_vars ~ 'Binary', "
+"0","      variable %in% outcome_vars ~ 'Outcome',"
+"0","      TRUE ~ 'Categorical'"
+"0","    )"
+"0","  ) %>% "
+"0","  arrange(type) %>% "
+"0","  select(type, variable, description) %>% "
+"0","  knitr::kable(format='html') %>%"
+"0","  kableExtra::collapse_rows(columns = 1)"
+"1","<table>
+ <thead>
+  <tr>
+   <th style=""text-align:left;""> type </th>
+   <th style=""text-align:left;""> variable </th>
+   <th style=""text-align:left;""> description </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style=""text-align:left;vertical-align: middle !important;"" rowspan=""13""> Binary </td>
+   <td style=""text-align:left;""> sex </td>
+   <td style=""text-align:left;""> Sex = Male </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> nonwhite </td>
+   <td style=""text-align:left;""> Is the patient nonwhite? </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> ed_delirium </td>
+   <td style=""text-align:left;""> Was the patient delirious in the ED (0-hour or 3-hour)? </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> delirium_0h </td>
+   <td style=""text-align:left;""> Was the patient delirious in the ED at 0-hour? </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> ltc </td>
+   <td style=""text-align:left;""> Does the patient live in a nursing home? </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> dementia_lib </td>
+   <td style=""text-align:left;""> Does the patient have dementia? </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> etiol4_drug_dich1 </td>
+   <td style=""text-align:left;""> Delirium etiology - Drug </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> etiol4_cns_dich1 </td>
+   <td style=""text-align:left;""> Delirium etiology - Central Nervous System </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> etiol4_metab_dich1 </td>
+   <td style=""text-align:left;""> Delirium etiology - Metabolic disturbance </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> etiol4_organ_dys_dich1 </td>
+   <td style=""text-align:left;""> Delirium etiology - Organ Dysfunction </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> etiol4_infection_sys_dich1 </td>
+   <td style=""text-align:left;""> Delirium etiology - Infection </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> etiol4_other_dich1 </td>
+   <td style=""text-align:left;""> Delirium etiology - Other </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> homemed_steroids </td>
+   <td style=""text-align:left;""> Taking Steroids </td>
+  </tr>
+  <tr>
+   <td style=""text-align:left;vertical-align: middle !important;"" rowspan=""6""> Categorical </td>
+   <td style=""text-align:left;""> il6 </td>
+   <td style=""text-align:left;""> Serum IL-6 (inflammation) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> il8 </td>
+   <td style=""text-align:left;""> Serum IL-8 (inflammation) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> s100b </td>
+   <td style=""text-align:left;""> Serum S100b (neuronal injury) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> PAI </td>
+   <td style=""text-align:left;""> Serum PAI-I (coagulation) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> sTNFR1 </td>
+   <td style=""text-align:left;""> Serum STNFR1 (inflammation) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> proteinC </td>
+   <td style=""text-align:left;""> Serum protein C (coagulation) </td>
+  </tr>
+  <tr>
+   <td style=""text-align:left;vertical-align: middle !important;"" rowspan=""6""> Continuous </td>
+   <td style=""text-align:left;""> age </td>
+   <td style=""text-align:left;""> Age in years </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> education_level </td>
+   <td style=""text-align:left;""> Highest Level of Education (Completed): </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> charlson </td>
+   <td style=""text-align:left;""> Charlson Comorbidity Index </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> mod_apache_noage </td>
+   <td style=""text-align:left;""> Acute Physiology Score (Severity of index) with Age </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> mod_apache </td>
+   <td style=""text-align:left;""> Acute Physiology Score (Severity of index) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> hosp_los </td>
+   <td style=""text-align:left;""> Hospital Length of stay </td>
+  </tr>
+  <tr>
+   <td style=""text-align:left;vertical-align: middle !important;"" rowspan=""4""> Outcome </td>
+   <td style=""text-align:left;""> OARS_ADL_ED_0h_recode </td>
+   <td style=""text-align:left;""> Pre-illess OARS ADL (Function) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> OARS_ADL_ED_6m_recode </td>
+   <td style=""text-align:left;""> 6-month OARS ADL (Function) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> iqcode_score </td>
+   <td style=""text-align:left;""> Pre-illness IQCODE (Cognition) </td>
+  </tr>
+  <tr>
+   
+   <td style=""text-align:left;""> iqcode6mo </td>
+   <td style=""text-align:left;""> 6-month IQCODE (Cognition) </td>
+  </tr>
+</tbody>
+</table>"

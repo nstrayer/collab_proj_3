@@ -2,3 +2,97 @@
 Initialized empty Git repository in /home/nick/fast_bind/collaboration/project3/.git/
 ]0;/home/nick/fast_bind/collaboration/project3]0;nick@compooper: ~/fast_bind/collaboration/project3[01;32mnick@compooper[00m:[01;34m~/fast_bind/collaboration/project3[00m$ git remote add origin git@github.com:nstrayer/collab_proj_3.git
 ]0;/home/nick/fast_bind/collaboration/project3]0;nick@compooper: ~/fast_bind/collaboration/project3[01;32mnick@compooper[00m:[01;34m~/fast_bind/collaboration/project3[00m$ lgit "most of the exploratory stuff has been done"
+[master (root-commit) eb6af32] most of the exploratory stuff has been done
+ 83 files changed, 17896 insertions(+)
+ create mode 100644 .Rproj.user/4CADD3E8/console06/95EB2D54
+ create mode 100644 .Rproj.user/4CADD3E8/console06/95EB2D54.env
+ create mode 100644 .Rproj.user/4CADD3E8/console06/INDEX001
+ create mode 100644 .Rproj.user/4CADD3E8/pcs/files-pane.pper
+ create mode 100644 .Rproj.user/4CADD3E8/pcs/source-pane.pper
+ create mode 100644 .Rproj.user/4CADD3E8/pcs/windowlayoutstate.pper
+ create mode 100644 .Rproj.user/4CADD3E8/pcs/workbench-pane.pper
+ create mode 100644 .Rproj.user/4CADD3E8/saved_source_markers
+ create mode 100644 .Rproj.user/4CADD3E8/sources/prop/142CFC6E
+ create mode 100644 .Rproj.user/4CADD3E8/sources/prop/A4D20A77
+ create mode 100644 .Rproj.user/4CADD3E8/sources/prop/DE40E120
+ create mode 100644 .Rproj.user/4CADD3E8/sources/prop/EA15C7FD
+ create mode 100644 .Rproj.user/4CADD3E8/sources/prop/INDEX
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/4BF58318-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/53E17D72-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/5DE3E4B3-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/8E7BBDFE-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/B9B8E0D3
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/B9B8E0D3-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/BAFB3809-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/D9F71867-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/DABAAACA-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/E3848081-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/EA937EFA-contents
+ create mode 100644 .Rproj.user/4CADD3E8/sources/s-2bf25557/lock_file
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/4CADD3E82bf25557/chunks.json
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c11nv2ey493r7/00001a.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c11nv2ey493r7/00001b.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c11nv2ey493r7/00001b.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c11nv2ey493r7/00001c.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c11nv2ey493r7/00001c.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c11nv2ey493r7/00001c.snapshot
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c4qw4s2w9jefp/00000d.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c4qw4s2w9jefp/00000e.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c4qw4s2w9jefp/00000e.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c4qw4s2w9jefp/00000e.snapshot
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7clr334e9lmo/00002b.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7clr334e9lmo/00002c.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7clr334e9lmo/00002c.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7clr334e9lmo/00002d.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7clr334e9lmo/00002d.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7clr334e9lmo/00002d.snapshot
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7dywz15plskj/000002.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/c7dywz15plskj/000002.rdf
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/ccu1ohkpdxdlr/00005f.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/ch8uiu15jqrtw/000008.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/ch8uiu15jqrtw/000008.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/ch8uiu15jqrtw/000008.snapshot
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/chp4cfzf447dk/000002.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/chunks.json
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crcuc2hu2o7jx/00000f.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crcuc2hu2o7jx/000010.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crcuc2hu2o7jx/000010.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crcuc2hu2o7jx/000010.snapshot
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crtx1gy9oneku/00001c.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crtx1gy9oneku/00001d.metadata
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crtx1gy9oneku/00001d.png
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/crtx1gy9oneku/00001d.snapshot
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/csetup_chunk/00000d.csv
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/crosstalk-1.0.0/css/crosstalk.css
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/crosstalk-1.0.0/js/crosstalk.js
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/crosstalk-1.0.0/js/crosstalk.js.map
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/crosstalk-1.0.0/js/crosstalk.min.js
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/crosstalk-1.0.0/js/crosstalk.min.js.map
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/htmlwidgets-1.0/htmlwidgets.js
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/jquery-1.11.3/jquery-AUTHORS.txt
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/jquery-1.11.3/jquery.js
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/jquery-1.11.3/jquery.min.js
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/jquery-1.11.3/jquery.min.map
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/plotly-binding-4.7.1/plotly.js
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/plotlyjs-1.29.2/LICENSE
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/plotlyjs-1.29.2/plotly-htmlwidgets.css
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/plotlyjs-1.29.2/plotly-latest.min.js
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/typedarray-0.1/LICENSE
+ create mode 100644 .Rproj.user/shared/notebooks/9E490717-Strayer_Interim/1/s/lib/typedarray-0.1/typedarray.min.js
+ create mode 100644 .Rproj.user/shared/notebooks/patch-chunk-names
+ create mode 100644 .Rproj.user/shared/notebooks/paths
+ create mode 100644 Strayer_Interim.Rmd
+ create mode 100644 Strayer_Interim.html
+ create mode 100644 data_dictionary.csv
+ create mode 100644 delineate_students.csv
+ create mode 100644 initial_work.R
+ create mode 100644 project3.Rproj
+Counting objects: 101, done.
+Delta compression using up to 8 threads.
+Compressing objects:   1% (1/87)   Compressing objects:   2% (2/87)   Compressing objects:   3% (3/87)   Compressing objects:   4% (4/87)   Compressing objects:   5% (5/87)   Compressing objects:   6% (6/87)   Compressing objects:   8% (7/87)   Compressing objects:   9% (8/87)   Compressing objects:  10% (9/87)   Compressing objects:  11% (10/87)   Compressing objects:  12% (11/87)   Compressing objects:  13% (12/87)   Compressing objects:  14% (13/87)   Compressing objects:  16% (14/87)   Compressing objects:  17% (15/87)   Compressing objects:  18% (16/87)   Compressing objects:  19% (17/87)   Compressing objects:  20% (18/87)   Compressing objects:  21% (19/87)   Compressing objects:  22% (20/87)   Compressing objects:  24% (21/87)   Compressing objects:  25% (22/87)   Compressing objects:  26% (23/87)   Compressing objects:  27% (24/87)   Compressing objects:  28% (25/87)   Compressing objects:  29% (26/87)   Compressing objects:  31% (27/87)   Compressing objects:  32% (28/87)   Compressing objects:  33% (29/87)   Compressing objects:  34% (30/87)   Compressing objects:  35% (31/87)   Compressing objects:  36% (32/87)   Compressing objects:  37% (33/87)   Compressing objects:  39% (34/87)   Compressing objects:  40% (35/87)   Compressing objects:  41% (36/87)   Compressing objects:  42% (37/87)   Compressing objects:  43% (38/87)   Compressing objects:  44% (39/87)   Compressing objects:  45% (40/87)   Compressing objects:  47% (41/87)   Compressing objects:  48% (42/87)   Compressing objects:  49% (43/87)   Compressing objects:  50% (44/87)   Compressing objects:  51% (45/87)   Compressing objects:  52% (46/87)   Compressing objects:  54% (47/87)   Compressing objects:  55% (48/87)   Compressing objects:  56% (49/87)   Compressing objects:  57% (50/87)   Compressing objects:  58% (51/87)   Compressing objects:  59% (52/87)   Compressing objects:  60% (53/87)   Compressing objects:  62% (54/87)   Compressing objects:  63% (55/87)   Compressing objects:  64% (56/87)   Compressing objects:  65% (57/87)   Compressing objects:  66% (58/87)   Compressing objects:  67% (59/87)   Compressing objects:  68% (60/87)   Compressing objects:  70% (61/87)   Compressing objects:  71% (62/87)   Compressing objects:  72% (63/87)   Compressing objects:  73% (64/87)   Compressing objects:  74% (65/87)   Compressing objects:  75% (66/87)   Compressing objects:  77% (67/87)   Compressing objects:  78% (68/87)   Compressing objects:  79% (69/87)   Compressing objects:  80% (70/87)   Compressing objects:  81% (71/87)   Compressing objects:  82% (72/87)   Compressing objects:  83% (73/87)   Compressing objects:  85% (74/87)   Compressing objects:  86% (75/87)   Compressing objects:  87% (76/87)   Compressing objects:  88% (77/87)   Compressing objects:  89% (78/87)   Compressing objects:  90% (79/87)   Compressing objects:  91% (80/87)   Compressing objects:  93% (81/87)   Compressing objects:  94% (82/87)   Compressing objects:  95% (83/87)   Compressing objects:  96% (84/87)   Compressing objects:  97% (85/87)   Compressing objects:  98% (86/87)   Compressing objects: 100% (87/87)   Compressing objects: 100% (87/87), done.
+Writing objects:   0% (1/101)   Writing objects:   1% (2/101)   Writing objects:   2% (3/101)   Writing objects:   3% (4/101)   Writing objects:   4% (5/101)   Writing objects:   5% (6/101)   Writing objects:   6% (7/101)   Writing objects:   7% (8/101)   Writing objects:   8% (9/101)   Writing objects:   9% (10/101)   Writing objects:  10% (11/101)   Writing objects:  11% (12/101)   Writing objects:  12% (13/101)   Writing objects:  13% (14/101)   Writing objects:  14% (15/101)   Writing objects:  15% (16/101)   Writing objects:  16% (17/101)   Writing objects:  17% (18/101)   Writing objects:  18% (19/101)   Writing objects:  19% (20/101)   Writing objects:  20% (21/101)   Writing objects:  21% (22/101)   Writing objects:  22% (23/101)   Writing objects:  23% (24/101)   Writing objects:  24% (25/101)   Writing objects:  25% (26/101)   Writing objects:  26% (27/101)   Writing objects:  27% (28/101)   Writing objects:  28% (29/101)   Writing objects:  29% (30/101)   Writing objects:  30% (31/101)   Writing objects:  31% (32/101)   Writing objects:  32% (33/101)   Writing objects:  33% (34/101)   Writing objects:  34% (35/101)   Writing objects:  35% (36/101)   Writing objects:  36% (37/101)   Writing objects:  37% (38/101)   Writing objects:  38% (39/101)   Writing objects:  39% (40/101)   Writing objects:  40% (41/101)   Writing objects:  41% (42/101)   Writing objects:  44% (45/101)   Writing objects:  45% (46/101)   Writing objects:  46% (47/101)   Writing objects:  47% (48/101)   Writing objects:  48% (49/101)   Writing objects:  49% (50/101)   Writing objects:  50% (51/101)   Writing objects:  51% (52/101)   Writing objects:  52% (53/101)   Writing objects:  53% (54/101)   Writing objects:  54% (55/101)   Writing objects:  55% (56/101)   Writing objects:  56% (57/101)   Writing objects:  57% (58/101)   Writing objects:  58% (59/101)   Writing objects:  59% (60/101)   Writing objects:  60% (61/101)   Writing objects:  61% (62/101)   Writing objects:  62% (63/101)   Writing objects:  63% (64/101)   Writing objects:  64% (65/101)   Writing objects:  65% (66/101)   Writing objects:  66% (67/101)   Writing objects:  67% (68/101)   Writing objects:  68% (69/101)   Writing objects:  69% (70/101)   Writing objects:  70% (71/101)   Writing objects:  71% (72/101)   Writing objects:  72% (73/101)   Writing objects:  73% (74/101)   Writing objects:  74% (75/101)   Writing objects:  75% (76/101)   Writing objects:  76% (77/101)   Writing objects:  78% (79/101)   Writing objects:  79% (80/101)   Writing objects:  80% (81/101)   Writing objects:  81% (82/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  82% (83/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  83% (84/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  84% (85/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  85% (86/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  86% (87/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  87% (88/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  88% (89/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  89% (90/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  90% (91/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  91% (92/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  92% (93/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  93% (94/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  94% (95/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  95% (96/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  96% (97/101), 760.00 KiB | 1.47 MiB/s   Writing objects:  96% (97/101), 1.92 MiB | 1.21 MiB/s   Writing objects:  97% (98/101), 1.92 MiB | 1.21 MiB/s   Writing objects:  98% (99/101), 1.92 MiB | 1.21 MiB/s   Writing objects:  99% (100/101), 1.92 MiB | 1.21 MiB/s   Writing objects: 100% (101/101), 1.92 MiB | 1.21 MiB/s   Writing objects: 100% (101/101), 2.16 MiB | 1.21 MiB/s, done.
+Total 101 (delta 7), reused 0 (delta 0)
+remote: Resolving deltas:   0% (0/7)   [Kremote: Resolving deltas:  71% (5/7)   [Kremote: Resolving deltas:  85% (6/7)   [Kremote: Resolving deltas: 100% (7/7)   [Kremote: Resolving deltas: 100% (7/7), done.[K
+To git@github.com:nstrayer/collab_proj_3.git
+ * [new branch]      master -> master
+]0;/home/nick/fast_bind/collaboration/project3]0;nick@compooper: ~/fast_bind/collaboration/project3[01;32mnick@compooper[00m:[01;34m~/fast_bind/collaboration/project3[00m$ lgit 'outcome plot done'

@@ -64,13 +64,19 @@ binary_vars <- c(
 binary_data <- data_gathered %>% 
   filter(variable %in% binary_vars)
 
-outcome_vars <- c(
-  'OARS_ADL_ED_0h_recode','OARS_ADL_ED_6m_recode',  # Function
-  'iqcode_score', 'iqcode6mo'                       # Cognition
-)
-outcome_data <- data_gathered %>% 
-  filter(variable %in% outcome_vars)
+outcome_function <- c('OARS_ADL_ED_0h_recode','OARS_ADL_ED_6m_recode')
+outcome_cognition <- c('iqcode_score', 'iqcode6mo')
+outcome_vars <- c(outcome_function, outcome_cognition)
 
+outcome_data <- data_gathered %>% 
+  filter(variable %in% outcome_vars) %>% 
+  mutate(
+    outcome = ifelse(variable %in% outcome_function, 'Function', 'Cognition'),
+    time = factor(
+      ifelse(str_detect(variable, '6m'), 'followup', 'baseline'), 
+      levels = c('followup', 'baseline') 
+    )
+  )
 ```
 
 ```{r}
@@ -328,6 +334,44 @@ binary_arranged %>%
 
 ### Outcome Variables
 ```{r}
-outcome_data
+
+outcome_plot <- function(data, plot_title){
+  longitudinal_plot <- data %>% 
+    mutate(time = factor(time, levels = c('baseline', 'followup'))) %>% 
+    ggplot(aes(value)) +
+    geom_density(fill = 'steelblue', color = 'steelblue') +
+    geom_text(aes(x = value, y = 0), label = '|', alpha = 0.5, hjust = 0.5, vjust = 1) +
+    theme_minimal() +
+    labs(title = plot_title, x = ifelse(plot_title == 'Cognition', 'density', '')) +
+    facet_grid(time~.)
+  
+  
+  change_plot <- data %>% 
+    select(id, outcome, value, time) %>% 
+    spread(time, value) %>% 
+    mutate(change = followup - baseline) %>% 
+    filter(!is.na(change)) %>% 
+    ggplot(aes(change)) +
+    geom_density(fill = 'steelblue', color = 'steelblue') +
+    labs(y = '', x = ifelse(plot_title == 'Cognition', 'change', '')) +
+    geom_text(aes(x = change, y = 0), label = '|', alpha = 0.5, hjust = 0.5, vjust = 1) +
+    theme_minimal()
+  
+  { longitudinal_plot  + change_plot }
+    
+}
+
+
+function_plots <-  outcome_data %>% 
+    filter(outcome == 'Function') %>% 
+    outcome_plot('Function')
+
+cognition_plots <-  outcome_data %>% 
+    filter(outcome == 'Cognition') %>% 
+    outcome_plot('Cognition')
+
+{function_plots - cognition_plots} + plot_layout(ncol = 1)
+
+
 ```
 

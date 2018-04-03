@@ -1,5 +1,0 @@
-"0","data %>% select(-id) %>% "
-"0","  visdat::vis_dat() +"
-"0","  theme("
-"0","    axis.text.x.top = element_text(hjust = 0)"
-"0","  )"

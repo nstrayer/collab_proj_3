@@ -1,0 +1,5 @@
+"0","data_gathered %>% "
+"0","  mutate(description = str_replace_all(description, ' ', '_')) %>% "
+"0","  select(-variable) %>% "
+"0","  spread(description, value) %>% "
+"0","  reportviz::missing_patterns()"
